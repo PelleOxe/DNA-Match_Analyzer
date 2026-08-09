@@ -1,0 +1,2618 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNA-Match Analyzer v0.9.37</title>
+<meta name="theme-color" content="#1a1a2e">
+<style>
+  :root {
+    --bg:        #1a1a2e;
+    --bg2:       #16213e;
+    --bg3:       #0f3460;
+    --accent:    #e94560;
+    --accent2:   #a8c5da;
+    --gold:      #c9a84c;
+    --text:      #e8e8f0;
+    --muted:     #8888aa;
+    --green:     #4caf7d;
+    --yellow:    #f0c040;
+    --red:       #e94560;
+    --border:    #2a2a4a;
+    --card:      #1e1e38;
+    --radius:    8px;
+    --font:      'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  /* HEADER */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .dna-icon { font-size: 28px; }
+  .app-title { font-size: 18px; font-weight: 700; color: var(--accent2); letter-spacing: 0.5px; }
+  .app-version { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .header-actions { display: flex; gap: 8px; }
+  .btn { padding: 7px 14px; border: none; border-radius: var(--radius); cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--bg3); color: var(--accent2); border: 1px solid var(--border); }
+  .btn-gold { background: var(--gold); color: #1a1a2e; }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  /* TABS */
+  .tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tab { padding: 12px 20px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; transition: color 0.15s, border-color 0.15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+  /* MAIN */
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* CARDS */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 16px; }
+  .card-title { font-size: 14px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+  /* GRID LAYOUTS */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  /* FORM ELEMENTS */
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  input, select, textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); padding: 8px 10px; font-size: 13px; font-family: var(--font);
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent2); }
+  input[type="file"] { padding: 6px; cursor: pointer; }
+  .field { margin-bottom: 12px; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  /* DNA VALUES */
+  .dna-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .dna-label { font-size: 13px; font-weight: 700; color: var(--accent2); padding: 8px 0 4px; grid-column: 1/-1; border-top: 1px solid var(--border); margin-top: 4px; }
+  .dna-label:first-child { border-top: none; margin-top: 0; }
+
+  /* PERSON PILLS */
+  .person-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 20px; padding: 3px 10px; font-size: 12px;
+    color: var(--accent2); margin: 3px;
+  }
+  .person-pill .remove { cursor: pointer; color: var(--accent); font-weight: 700; margin-left: 2px; }
+
+  /* TRIANGULATION TABLE */
+  .tri-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tri-table th { background: var(--bg3); color: var(--accent2); padding: 8px 10px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tri-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .tri-table tr:hover td { background: rgba(168,197,218,0.04); }
+  .tri-table input { padding: 4px 6px; font-size: 12px; }
+
+  /* ANALYSIS */
+  .analysis-block { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .analysis-block h3 { font-size: 13px; color: var(--gold); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .analysis-result { font-size: 13px; line-height: 1.7; color: var(--text); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; margin: 2px; }
+  .tag-green { background: rgba(76,175,125,0.2); color: var(--green); border: 1px solid var(--green); }
+  .tag-yellow { background: rgba(240,192,64,0.15); color: var(--yellow); border: 1px solid var(--yellow); }
+  .tag-red { background: rgba(233,69,96,0.15); color: var(--red); border: 1px solid var(--red); }
+  .finding { padding: 8px 12px; border-left: 3px solid var(--gold); margin: 6px 0; background: rgba(201,168,76,0.06); border-radius: 0 5px 5px 0; font-size: 13px; line-height: 1.6; }
+  .finding.good { border-left-color: var(--green); background: rgba(76,175,125,0.06); }
+  .finding.warn { border-left-color: var(--yellow); background: rgba(240,192,64,0.06); }
+  .finding.bad { border-left-color: var(--red); background: rgba(233,69,96,0.06); }
+
+  /* GEDCOM STATUS */
+  .gedcom-status { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: var(--green); }
+  .dot-grey { background: var(--muted); }
+
+  /* SESSION PANEL */
+  .session-info { font-size: 13px; color: var(--muted); margin-bottom: 12px; line-height: 1.6; }
+  .action-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+
+  /* PRINT / PDF */
+  @media print {
+    @page { margin: 12mm 15mm; size: A4 portrait; }
+
+    /* 1. Kill body min-height so no blank first page */
+    body { min-height: 0 !important; background: #fff !important; color: #111 !important;
+           font-size: 10pt !important; line-height: 1.45 !important; }
+
+    /* 2. Hide everything, then show only what we need */
+    body > * { display: none !important; }
+    body > main { display: block !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+    .panel { display: none !important; }
+    #panel-analys { display: block !important; padding: 0 !important; margin: 0 !important; }
+    #analysisOutput { display: block !important; }
+    .print-header { display: block !important; padding-bottom: 6pt; border-bottom: 1.5pt solid #1a1a2e; margin-bottom: 10pt; }
+
+    /* 3. Outer card wrapper — strip all decoration */
+    #analysisOutput > .card { background: #fff !important; border: none !important;
+                              padding: 0 !important; margin: 0 !important; }
+
+    /* 4. Analysis blocks — NO break-inside, let them flow freely */
+    .analysis-block { background: #fff !important; border: 1pt solid #ccc !important;
+                      border-radius: 3pt !important; padding: 6pt 9pt !important;
+                      margin-bottom: 6pt !important; page-break-inside: auto;
+                      break-inside: auto; }
+    .analysis-block h3 { color: #111 !important; font-size: 10.5pt !important;
+                         margin-bottom: 5pt !important; page-break-after: avoid; }
+
+    /* 5. Findings — compact, no forced breaks */
+    .finding { padding: 3pt 7pt !important; margin: 2pt 0 !important;
+               font-size: 9pt !important; line-height: 1.3 !important;
+               page-break-inside: auto; break-inside: auto; }
+    .finding.good { background: #edf7f2 !important; border-left: 2.5pt solid #4caf7d !important; }
+    .finding.warn { background: #fdf8e8 !important; border-left: 2.5pt solid #c9a84c !important; }
+    .finding.bad  { background: #fef0f2 !important; border-left: 2.5pt solid #e94560 !important; }
+    .finding:not(.good):not(.warn):not(.bad) { background: #f5f5f5 !important; border-left: 2.5pt solid #aaa !important; }
+
+    /* 6. Tags */
+    .tag { font-size: 7.5pt !important; padding: 1pt 4pt !important; border-radius: 8pt !important; }
+    .tag-green  { background: #d4f5e4 !important; color: #1a6b3c !important; border: none !important; }
+    .tag-yellow { background: #fff3cd !important; color: #856404 !important; border: none !important; }
+    .tag-red    { background: #fde8ec !important; color: #a0122a !important; border: none !important; }
+
+    /* 7. Overlap alerts */
+    .overlap-alert { font-size: 8.5pt !important; padding: 3pt 7pt !important;
+                     background: #fffbf0 !important; border: 1pt solid #c9a84c !important;
+                     margin: 2pt 10pt !important; }
+
+    /* 8. Segment tables */
+    .match-segments { display: block !important; }
+    .seg-table { font-size: 7.5pt !important; width: 100% !important; }
+    .seg-table th { background: #e8e8f0 !important; color: #111 !important;
+                    padding: 2pt 5pt !important; }
+    .seg-table td { padding: 2pt 5pt !important; border-bottom: 0.5pt solid #ddd !important; }
+
+    /* 9. Hide UI buttons inside analysis output */
+    #analysisOutput button, #analysisOutput .action-row,
+    #analysisOutput [style*="gap:10px"] { display: none !important; }
+
+    /* 10. Match card headers — hide remove button */
+    .match-card-header button { display: none !important; }
+
+    /* 11. Empty state */
+    .empty { display: none !important; }
+  }
+  .print-header { display: none; }
+
+  /* SCROLLABLE SELECT */
+  select[multiple] { height: 120px; }
+
+  /* PERSON SEARCH */
+  .person-search-wrap { position: relative; }
+  .person-search-input { border-radius: 5px 5px 0 0 !important; }
+  .person-search-input:not(:placeholder-shown) + .person-search-count { display: block; }
+  .person-search-count { display: none; font-size: 11px; color: var(--muted); text-align: right; margin: 2px 0; }
+  .person-search-list {
+    max-height: 180px; overflow-y: auto; background: var(--bg);
+    border: 1px solid var(--accent2); border-top: none;
+    border-radius: 0 0 5px 5px; display: none;
+  }
+  .person-search-list.open { display: block; }
+  .person-search-item {
+    padding: 7px 10px; font-size: 13px; cursor: pointer;
+    border-bottom: 1px solid var(--border); transition: background 0.1s;
+  }
+  .person-search-item:hover, .person-search-item.selected { background: var(--bg3); color: var(--accent2); }
+  .person-search-item:last-child { border-bottom: none; }
+  .person-search-item .birth-info { font-size: 11px; color: var(--muted); }
+  .person-selected-display {
+    margin-top: 6px; padding: 6px 10px; background: rgba(76,175,125,0.1);
+    border: 1px solid var(--green); border-radius: 5px; font-size: 12px; color: var(--green);
+    display: none;
+  }
+  .person-selected-display.visible { display: block; }
+
+  /* EMPTY STATE */
+  .empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px; }
+  .empty-icon { font-size: 40px; margin-bottom: 10px; }
+
+  /* TOOLTIP */
+  [title] { cursor: help; }
+
+  /* SHARED MATCHES */
+  .match-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; overflow: hidden; }
+  .match-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; }
+  .match-card-header:hover { background: rgba(168,197,218,0.04); }
+  .match-name { font-weight: 700; font-size: 14px; flex: 1; }
+  .match-meta { font-size: 12px; color: var(--muted); }
+  .match-testers { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tester-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .match-segments { display: none; border-top: 1px solid var(--border); }
+  .match-segments.open { display: block; }
+  .seg-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .seg-table th { background: var(--bg3); color: var(--accent2); padding: 6px 10px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .seg-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  .seg-table tr:last-child td { border-bottom: none; }
+  .seg-overlap { background: rgba(201,168,76,0.12); }
+  .chr-badge { display: inline-block; background: var(--bg3); color: var(--accent2); border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 700; min-width: 28px; text-align: center; }
+  .side-tag { padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .side-mor { background: rgba(76,175,125,0.2); color: var(--green); border: 1px solid var(--green); }
+  .side-far { background: rgba(168,197,218,0.15); color: var(--accent2); border: 1px solid var(--accent2); }
+  .side-unknown { background: rgba(240,192,64,0.1); color: var(--yellow); border: 1px solid var(--yellow); }
+  .tester-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  .filter-btn { padding: 5px 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 12px; cursor: pointer; font-weight: 600; transition: all 0.15s; }
+  .filter-btn.active { background: var(--bg3); color: var(--accent2); border-color: var(--accent2); }
+  .csv-drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 20px; text-align: center; color: var(--muted); font-size: 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s; margin-bottom: 12px; }
+  .csv-drop-zone:hover, .csv-drop-zone.dragover { border-color: var(--accent2); background: rgba(168,197,218,0.04); color: var(--text); }
+  .csv-loaded-list { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .overlap-alert { background: rgba(201,168,76,0.1); border: 1px solid var(--gold); border-radius: 5px; padding: 8px 12px; font-size: 12px; margin: 4px 0; color: var(--gold); }
+
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="dna-icon">🧬</div>
+    <div>
+      <div class="app-title">DNA-Match Analyzer</div>
+      <div class="app-version">v0.9.37</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-secondary" onclick="App.saveSession()">💾 Spara session</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('loadSessionFile').click()">📂 Ladda session</button>
+    <button class="btn btn-gold" onclick="App.runAnalysis()">🔍 Kör analys</button>
+    <input type="file" id="loadSessionFile" accept=".json" style="display:none" onchange="App.loadSession(event)">
+  </div>
+</header>
+
+<div id="statusBar" style="background:var(--bg2);border-bottom:1px solid var(--border);padding:5px 20px;font-size:11px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap">
+  <span id="statusGedcomA">📁 GEDCOM A: ej laddad</span>
+  <span id="statusGedcomB">📁 GEDCOM B: ej laddad</span>
+  <span id="statusMatches">🧩 Träffar: 0 st</span>
+  <span id="statusSession">💾 Ingen session</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="App.showTab('personer')">👥 Personer &amp; DNA</div>
+  <div class="tab" onclick="App.showTab('triangulering')">🧩 Gemensamma DNA-träffar</div>
+  <div class="tab" onclick="App.showTab('analys')">🔍 Analys</div>
+  <div class="tab" onclick="App.showTab('session')">💾 Session</div>
+</div>
+
+<main>
+
+<!-- ═══════════════════════════════════════════════════════ PANEL: PERSONER -->
+<div class="panel active" id="panel-personer">
+
+  <div class="grid2">
+    <!-- PERSON A -->
+    <div class="card">
+      <div class="card-title">🅰 Person A</div>
+      <div class="field">
+        <label>Namn på person A</label>
+        <input type="text" id="nameA" placeholder="t.ex. Erik Johansson" oninput="App.updateSessionMeta()">
+      </div>
+      <div class="field">
+        <label>GEDCOM-fil för A</label>
+        <input type="file" id="gedcomA" accept=".ged,.gedcom" onchange="App.loadGedcom('A', this)">
+        <div class="gedcom-status" id="gedcomStatusA">
+          <div class="dot dot-grey"></div><span>Ingen fil laddad</span>
+        </div>
+      </div>
+      <div class="field" id="personASelectWrap" style="display:none">
+        <label>Sök och välj person A i trädet</label>
+        <div class="person-search-wrap">
+          <input type="text" id="personASearch" class="person-search-input" placeholder="Skriv förnamn, efternamn eller ort…" oninput="App.filterPersonSearch('A')" onfocus="App.openPersonSearch('A')" autocomplete="off">
+          <div class="person-search-count" id="personACount"></div>
+          <div class="person-search-list" id="personAList"></div>
+        </div>
+        <div class="person-selected-display" id="personASelected"></div>
+      </div>
+      <div class="field">
+        <label>Anteckningar om A</label>
+        <textarea id="notesA" rows="2" placeholder="Bakgrund, plattform, m.m."></textarea>
+      </div>
+    </div>
+
+    <!-- PERSON B -->
+    <div class="card">
+      <div class="card-title">🅱 Person B</div>
+      <div class="field">
+        <label>Namn på person B</label>
+        <input type="text" id="nameB" placeholder="t.ex. Maria Svensson" oninput="App.updateSessionMeta()">
+      </div>
+      <div class="field">
+        <label>GEDCOM-fil för B</label>
+        <input type="file" id="gedcomB" accept=".ged,.gedcom" onchange="App.loadGedcom('B', this)">
+        <div class="gedcom-status" id="gedcomStatusB">
+          <div class="dot dot-grey"></div><span>Ingen fil laddad</span>
+        </div>
+      </div>
+      <div class="field" id="personBSelectWrap" style="display:none">
+        <label>Sök och välj person B i trädet</label>
+        <div class="person-search-wrap">
+          <input type="text" id="personBSearch" class="person-search-input" placeholder="Skriv förnamn, efternamn eller ort…" oninput="App.filterPersonSearch('B')" onfocus="App.openPersonSearch('B')" autocomplete="off">
+          <div class="person-search-count" id="personBCount"></div>
+          <div class="person-search-list" id="personBList"></div>
+        </div>
+        <div class="person-selected-display" id="personBSelected"></div>
+      </div>
+      <div class="field">
+        <label>Anteckningar om B</label>
+        <textarea id="notesB" rows="2" placeholder="Bakgrund, plattform, m.m."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- DNA A ↔ B -->
+  <div class="card">
+    <div class="card-title">🧬 DNA-värden: A ↔ B</div>
+    <div class="dna-row">
+      <div class="field">
+        <label>Total cM</label>
+        <input type="number" id="ab_cm" placeholder="t.ex. 215" min="0" step="0.1">
+      </div>
+      <div class="field">
+        <label>Antal segment</label>
+        <input type="number" id="ab_seg" placeholder="t.ex. 12" min="0">
+      </div>
+      <div class="field">
+        <label>Längsta segment (cM)</label>
+        <input type="number" id="ab_longest" placeholder="t.ex. 48" min="0" step="0.1">
+      </div>
+    </div>
+    <div class="field">
+      <label>Plattform / källa</label>
+      <select id="ab_platform">
+        <option>MyHeritage</option>
+        <option>AncestryDNA</option>
+        <option>23andMe</option>
+        <option>FamilyTreeDNA</option>
+        <option>GEDmatch</option>
+        <option>Annan</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Kommentar</label>
+      <input type="text" id="ab_comment" placeholder="Ev. notering om matchningen">
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PANEL: GEMENSAMMA DNA-TRÄFFAR -->
+<div class="panel" id="panel-triangulering">
+
+  <!-- CSV IMPORT -->
+  <div class="card">
+    <div class="card-title">📂 Ladda MyHeritage CSV-export</div>
+    <div class="hint" style="margin-bottom:12px">En fil per testperson (Per, Carina, Ulla osv). Klicka på knappen nedan för att välja fil — drag-och-släpp fungerar inte alltid i alla webbläsare.</div>
+
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-green" onclick="document.getElementById('csvFileInput').click()">📄 Välj CSV-fil(er)…</button>
+      <span style="font-size:12px;color:var(--muted)">eller dra filer hit:</span>
+    </div>
+
+    <div class="csv-drop-zone" id="csvDropZone"
+      ondragover="event.preventDefault();event.stopPropagation();this.classList.add('dragover')"
+      ondragleave="event.stopPropagation();this.classList.remove('dragover')"
+      ondrop="event.preventDefault();event.stopPropagation();this.classList.remove('dragover');App.handleCsvFiles(event.dataTransfer.files)"
+      onclick="document.getElementById('csvFileInput').click()">
+      ↑ Drag-och-släpp CSV-filer här
+    </div>
+    <input type="file" id="csvFileInput" accept=".csv,.txt" multiple style="display:none"
+      onchange="App.handleCsvFiles(this.files);this.value=''">
+    <div id="csvLoadedList" class="csv-loaded-list"></div>
+  </div>
+
+  <!-- MANUELL INMATNING -->
+  <details class="card" style="padding:0" id="manualInputDetails">
+    <summary style="padding:14px 18px;cursor:pointer;font-size:13px;font-weight:700;color:var(--gold);letter-spacing:0.5px;list-style:none;display:flex;align-items:center;gap:8px">
+      ✏️ MANUELL INMATNING <span style="color:var(--muted);font-weight:400;font-size:11px">(klicka för att öppna)</span>
+    </summary>
+    <div style="padding:0 18px 18px">
+
+      <!-- Namn -->
+      <div class="field" style="margin-top:14px">
+        <label>Namn på träffen</label>
+        <input type="text" id="triName" placeholder="Förnamn Efternamn (eller beteckning)">
+      </div>
+
+      <!-- GEDCOM-sökning -->
+      <div id="gedcomSearchNote" style="font-size:12px;color:var(--yellow);background:rgba(240,192,64,0.08);border:1px solid var(--yellow);border-radius:5px;padding:7px 12px;margin-bottom:10px">
+        ⚠ GEDCOM-filer sparas inte i sessionen — ladda dem på nytt under fliken <strong>Personer &amp; DNA</strong> för att söka här.
+      </div>
+      <div class="grid2" style="margin-bottom:4px">
+        <div class="field">
+          <label>Sök i A:s GEDCOM-träd <span id="gedcomAStatus" style="color:var(--muted);font-weight:400">(ej laddad)</span></label>
+          <div class="person-search-wrap">
+            <input type="text" id="triGedcomSearchA" class="person-search-input"
+              placeholder="Skriv namn eller ort…"
+              oninput="App.filterTriSearchSide('A')" onfocus="App.filterTriSearchSide('A')" autocomplete="off">
+            <div class="person-search-list" id="triGedcomListA"></div>
+          </div>
+          <div class="person-selected-display" id="triGedcomSelectedA"></div>
+        </div>
+        <div class="field">
+          <label>Sök i B:s GEDCOM-träd <span id="gedcomBStatus" style="color:var(--muted);font-weight:400">(ej laddad)</span></label>
+          <div class="person-search-wrap">
+            <input type="text" id="triGedcomSearchB" class="person-search-input"
+              placeholder="Skriv namn eller ort…"
+              oninput="App.filterTriSearchSide('B')" onfocus="App.filterTriSearchSide('B')" autocomplete="off">
+            <div class="person-search-list" id="triGedcomListB"></div>
+          </div>
+          <div class="person-selected-display" id="triGedcomSelectedB"></div>
+        </div>
+      </div>
+
+      <!-- cM mot A och B -->
+      <div class="grid2">
+        <div class="field">
+          <label>Delar med A — cM</label>
+          <input type="number" id="tri_cm_a" placeholder="t.ex. 215" min="0" step="0.1">
+          <div class="hint">Hur många cM delar denna person med Person A?</div>
+        </div>
+        <div class="field">
+          <label>Delar med B — cM</label>
+          <input type="number" id="tri_cm_b" placeholder="t.ex. 180" min="0" step="0.1">
+          <div class="hint">Hur många cM delar denna person med Person B?</div>
+        </div>
+      </div>
+
+      <!-- Relation -->
+      <div class="grid2">
+        <div class="field">
+          <label>Känd relation till A (fritext)</label>
+          <input type="text" id="triRelA" placeholder="t.ex. Syssling/3-männing, Brylling/4-männing, 2-männing +1">
+        </div>
+        <div class="field">
+          <label>Känd relation till B (fritext)</label>
+          <input type="text" id="triRelB" placeholder="t.ex. Syssling/3-männing, okänd">
+        </div>
+      </div>
+
+      <!-- Anträde -->
+      <div class="field">
+        <label>Anträde / härstamning (valfritt)</label>
+        <textarea id="triAntrade" rows="3" placeholder="t.ex. PER Andersson 1955- / NILS Andersson 1925–2017 / [GEMENSAM ANA]"></textarea>
+        <div class="hint">Klistra in ett anträde eller notera härstamningen. Hakparenteser för gemensamma anor.</div>
+      </div>
+
+      <!-- Segment -->
+      <div style="font-size:12px;color:var(--muted);margin:8px 0 6px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Segment (valfritt)</div>
+      <div id="manualSegments"></div>
+      <button class="btn btn-secondary btn-sm" onclick="App.addManualSegmentRow()" style="margin-bottom:12px">+ Lägg till kromosom</button>
+
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-green" onclick="App.addManualMatch()">+ Lägg till träff</button>
+        <button class="btn btn-secondary" onclick="App.clearManualForm()">Rensa</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- FILTER & LISTA -->
+  <div class="card">
+    <div class="card-title">
+      Gemensamma träffar
+      <span id="matchCount" style="color:var(--muted);font-weight:400;font-size:12px">0 st</span>
+    </div>
+
+    <!-- Testpersonsfilter -->
+    <div class="tester-filter" id="testerFilter">
+      <span style="font-size:12px;color:var(--muted);font-weight:600">Visa:</span>
+      <button class="filter-btn active" data-tester="all" onclick="App.setTesterFilter('all',this)">Alla</button>
+    </div>
+
+    <!-- Varning om inga testpersoner konfigurerade -->
+    <div id="noTesterWarning" style="display:none;background:rgba(240,192,64,0.1);border:1px solid var(--yellow);border-radius:5px;padding:8px 12px;font-size:12px;color:var(--yellow);margin-bottom:10px">
+      ⚠ Inga testpersoner är konfigurerade under <strong>Session → Testpersoner och kända grenar</strong>. Appen försöker ändå avgöra sida via testpersonens namn i CSV-filen — om Ulla (standardvärde) matchar = mors sida. Konfigurera testpersoner för mer precis analys.
+    </div>
+
+    <!-- Sök -->
+    <div class="field" style="margin-bottom:12px">
+      <input type="text" id="matchSearch" placeholder="Sök träffnamn…" oninput="App.renderMatchList()">
+    </div>
+
+    <div id="matchListWrap">
+      <div class="empty"><div class="empty-icon">🧩</div>Ladda en CSV-fil eller lägg till träffar manuellt.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PANEL: ANALYS -->
+<div class="panel" id="panel-analys">
+  <div class="print-header" style="padding:16px 0 8px;border-bottom:2px solid #1a1a2e;margin-bottom:16px">
+    <div style="font-size:20pt;font-weight:700;color:#1a1a2e">🧬 DNA-Analysrapport</div>
+    <div id="printMeta" style="font-size:10pt;color:#555;margin-top:4px"></div>
+  </div>
+  <div id="analysisOutput">
+    <div class="empty">
+      <div class="empty-icon">🔍</div>
+      Klicka på <strong>Kör analys</strong> för att starta.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PANEL: SESSION -->
+<div class="panel" id="panel-session">
+  <div class="card">
+    <div class="card-title">💾 Sessionhantering</div>
+    <div class="session-info" id="sessionInfo">Ingen session sparad än i detta fönster.</div>
+    <div class="action-row">
+      <button class="btn btn-primary" onclick="App.saveSession()">💾 Spara session som JSON</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('loadSessionFile').click()">📂 Ladda session</button>
+      <button class="btn btn-secondary" onclick="App.clearSession()">🗑 Rensa allt</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🧬 Testpersoner och kända grenar</div>
+    <div class="hint" style="margin-bottom:12px">Ange dina testpersoner och vilken gren de tillhör — används i grenananalysen för att väga DNA-träffar rätt.</div>
+    <div id="testerBranchList"><div style="color:var(--muted);font-size:12px">Inga testpersoner tillagda ännu.</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-top:12px;align-items:end;flex-wrap:wrap">
+      <div class="field" style="margin:0">
+        <label>Förnamn</label>
+        <input type="text" id="newTesterName" placeholder="t.ex. Per, Carina, Ulla">
+      </div>
+      <div class="field" style="margin:0">
+        <label>Känd gren</label>
+        <select id="newTesterBranch">
+          <option value="">— okänd —</option>
+          <option value="farfar">Farfars sida</option>
+          <option value="farmor">Farmors sida</option>
+          <option value="farmors_far">Farmors farsida</option>
+          <option value="farmors_mor">Farmors morsida</option>
+          <option value="morfar">Morfars sida</option>
+          <option value="mormor">Mormors sida</option>
+          <option value="mormors_far">Mormors farsida</option>
+          <option value="mormors_mor">Mormors morsida</option>
+          <option value="mor">Mors sida (okänd gren)</option>
+          <option value="far">Fars sida (okänd gren)</option>
+        </select>
+      </div>
+      <div class="field" style="margin:0">
+        <label>Anteckning</label>
+        <input type="text" id="newTesterNote" placeholder="valfritt">
+      </div>
+      <button class="btn btn-green" onclick="App.addTesterBranch()" style="margin-bottom:0">+ Lägg till</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ℹ Om DNA-Match Analyzer</div>
+    <div class="session-info">
+      <strong>Version:</strong> 0.9.37<br>
+      <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
+      <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · Sparning som JSON<br><br>
+      DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
+      Geografisk analys matchar orter textuellt med ±20 år tidsöverlapp. Kyrkogårdar exkluderas.
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+const state = {
+  gedcomA: null,
+  gedcomB: null,
+  personA: null,
+  personB: null,
+  matches: [],
+  csvFiles: [],
+  motherName: 'Ulla',
+  testers: [],   // [{name, branch, note}]
+  motherNameSetByUser: false,
+  version: '0.9.37'
+};
+
+// Global namespace — filled at end of script
+const App = {};
+
+// Top-level constants (must be here for hoisting to work correctly)
+const TESTER_COLORS = [
+  { bg:'rgba(168,197,218,0.15)', fg:'#a8c5da', border:'#a8c5da' },
+  { bg:'rgba(76,175,125,0.15)',  fg:'#4caf7d', border:'#4caf7d' },
+  { bg:'rgba(201,168,76,0.15)', fg:'#c9a84c', border:'#c9a84c' },
+  { bg:'rgba(233,69,96,0.15)',  fg:'#e94560', border:'#e94560' },
+  { bg:'rgba(180,130,220,0.15)',fg:'#b482dc', border:'#b482dc' },
+];
+const testerColorCache = {};
+let testerColorIdx = 0;
+let manualSegRows = 0;
+let activeTesterFilter = 'all';
+
+// Relationer med svenska männing-beteckningar + engelska inom parentes
+// Källa: Blaine Bettinger MRCA-tabeller + ISOGG
+const CM_RELATIONS = [
+  { min: 2300, max: 3900, rel: 'Identisk tvilling (Identical twin)', gen: 0 },
+  { min: 1700, max: 3900, rel: 'Förälder/Barn (Parent/Child)', gen: 1 },
+  { min: 1450, max: 2050, rel: 'Syskon (Full sibling)', gen: 1 },
+  { min: 1160, max: 1450, rel: 'Halvsyskon / Farförälder–barnbarn (Half sibling / Grandparent–grandchild)', gen: 2 },
+  { min: 575,  max: 1330, rel: 'Kusin / 2-männing (1st cousin)', gen: 2 },
+  { min: 200,  max: 650,  rel: 'Kusin +1 / 2-männing +1 generation (1st cousin once removed)', gen: 3 },
+  { min: 100,  max: 400,  rel: 'Syssling / 3-männing (2nd cousin)', gen: 3 },
+  { min: 50,   max: 200,  rel: 'Syssling +1 / 3-männing +1 generation (2nd cousin once removed)', gen: 4 },
+  { min: 20,   max: 175,  rel: 'Brylling / 4-männing (3rd cousin)', gen: 4 },
+  { min: 10,   max: 80,   rel: 'Brylling +1 / 4-männing +1 generation (3rd cousin once removed)', gen: 5 },
+  { min: 5,    max: 50,   rel: 'Pyssling / 5-männing (4th cousin)', gen: 5 },
+  { min: 0,    max: 20,   rel: 'Avlägsen släkting / 6-männing eller mer (Distant / 5th cousin or beyond)', gen: 6 },
+];
+
+function renderMatchList() {
+  const wrap = document.getElementById('matchListWrap');
+  // Update status bar
+  var sbM = document.getElementById('statusMatches');
+  if (sbM) sbM.textContent = '🧩 Träffar: ' + state.matches.length + ' st';
+
+  // Show/hide tester warning
+  var warnEl = document.getElementById('noTesterWarning');
+  if (warnEl) {
+    var hasTesters = state.testers && state.testers.length > 0;
+    warnEl.style.display = (state.matches.length > 0 && !hasTesters) ? 'block' : 'none';
+  }
+  const q = (document.getElementById('matchSearch')?.value || '').toLowerCase();
+
+  let matches = state.matches.filter(m => {
+    if (q && !m.name.toLowerCase().includes(q)) return false;
+    if (activeTesterFilter !== 'all' && !m.testers.some(t => t.name === activeTesterFilter)) return false;
+    return true;
+  });
+
+  document.getElementById('matchCount').textContent = matches.length + ' / ' + state.matches.length + ' st';
+
+  if (!matches.length) {
+    wrap.innerHTML = '<div class="empty"><div class="empty-icon">🧩</div>Inga träffar matchade filtret.</div>';
+    return;
+  }
+
+  // Find overlaps across all matches for highlighting
+  const overlapMap = buildOverlapMap(state.matches);
+
+  wrap.innerHTML = matches.map((m, idx) => renderMatchCard(m, idx, overlapMap)).join('');
+}
+
+function updateTesterFilterButtons() {
+  const allTesters = new Set();
+  state.matches.forEach(m => m.testers.forEach(t => allTesters.add(t.name)));
+  const bar = document.getElementById('testerFilter');
+  const existing = new Set([...bar.querySelectorAll('[data-tester]')].map(b => b.dataset.tester));
+  allTesters.forEach(name => {
+    if (!existing.has(name)) {
+      const btn = document.createElement('button');
+      btn.className = 'filter-btn';
+      btn.dataset.tester = name;
+      btn.textContent = name;
+      btn.onclick = () => setTesterFilter(name, btn);
+      bar.appendChild(btn);
+    }
+  });
+}
+
+
+// ═══════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const panels = ['personer','triangulering','analys','session'];
+    t.classList.toggle('active', panels[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════
+// GEDCOM PARSER
+// ═══════════════════════════════════════════════
+function parseGedcom(text) {
+  const lines = text.split(/\r?\n/);
+  const persons = [];
+  let cur = null;
+  let curTag = null;
+  let inFam = false;
+  const families = {}; // xref -> {husb, wife, chil:[]}
+  let curFam = null;
+  let curFamId = null;
+
+  for (let line of lines) {
+    const m = line.match(/^(\d+)\s+(@[^@]+@|\S+)\s*(.*)?$/);
+    if (!m) continue;
+    const level = parseInt(m[1]);
+    const tag = m[2];
+    const val = (m[3] || '').trim();
+
+    if (level === 0) {
+      inFam = false; curFam = null;
+      if (tag.startsWith('@') && val === 'INDI') {
+        cur = { id: tag, name: '', born: '', bornPlace: '', died: '', diedPlace: '', events: [], sex: '', noFather: false, famc: [], fams: [] };
+        persons.push(cur);
+        curTag = null;
+      } else if (tag.startsWith('@') && val === 'FAM') {
+        curFamId = tag;
+        families[tag] = { husb: '', wife: '', chil: [] };
+        curFam = families[tag];
+        inFam = true;
+        cur = null;
+      } else {
+        cur = null; inFam = false;
+      }
+      continue;
+    }
+
+    if (cur && !inFam) {
+      if (level === 1 && tag === 'NAME') { cur.name = val.replace(/\//g,'').trim(); curTag = 'NAME'; }
+      else if (level === 1 && tag === 'SEX') { cur.sex = val; }
+      else if (level === 1 && tag === 'BIRT') { curTag = 'BIRT'; }
+      else if (level === 1 && tag === 'DEAT') { curTag = 'DEAT'; }
+      else if (level === 1 && tag === 'RESI') { curTag = 'RESI'; }
+      else if (level === 1 && tag === 'EMIG') { curTag = 'EMIG'; }
+      else if (level === 1 && tag === 'IMMI') { curTag = 'IMMI'; }
+      else if (level === 1 && (tag === 'FAMC')) { cur.famc.push(val); curTag = null; }
+      else if (level === 1 && (tag === 'FAMS')) { cur.fams.push(val); curTag = null; }
+      else if (level === 2 && tag === 'DATE') {
+        const yr = extractYear(val);
+        if (curTag === 'BIRT') cur.born = yr;
+        else if (curTag === 'DEAT') cur.died = yr;
+        else if (yr) cur.events.push({ year: yr, place: '' });
+      }
+      else if (level === 2 && tag === 'PLAC') {
+        if (curTag === 'BIRT') cur.bornPlace = val;
+        else if (curTag === 'DEAT') cur.diedPlace = val;
+        else if (cur.events.length) cur.events[cur.events.length-1].place = val;
+        else cur.events.push({ year: '', place: val });
+      }
+    }
+
+    if (inFam && curFam) {
+      if (level === 1 && tag === 'HUSB') curFam.husb = val;
+      else if (level === 1 && tag === 'WIFE') curFam.wife = val;
+      else if (level === 1 && tag === 'CHIL') curFam.chil.push(val);
+    }
+  }
+
+  // Mark children without father
+  for (const [fid, fam] of Object.entries(families)) {
+    if (!fam.husb) {
+      for (const childId of fam.chil) {
+        const p = persons.find(x => x.id === childId);
+        if (p) { p.noFather = true; p.motherFamId = fid; p.motherWife = fam.wife; }
+      }
+    }
+  }
+
+  // Resolve names
+  for (const p of persons) {
+    if (!p.name) p.name = p.id;
+  }
+
+  return { persons, families };
+}
+
+function extractYear(dateStr) {
+  const m = dateStr.match(/\b(1[0-9]{3}|20[0-2][0-9])\b/);
+  return m ? parseInt(m[1]) : null;
+}
+
+// ═══════════════════════════════════════════════
+// GEDCOM LOAD
+// ═══════════════════════════════════════════════
+function loadGedcom(side, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const parsed = parseGedcom(e.target.result);
+    state['gedcom' + side] = parsed;
+    // Sort persons alphabetically once, store for search
+    parsed.sorted = [...parsed.persons].sort((a,b) => a.name.localeCompare(b.name, 'sv'));
+    const statusEl = document.getElementById('gedcomStatus' + side);
+    statusEl.innerHTML = `<div class="dot dot-green"></div><span>${file.name} — ${parsed.persons.length} personer inlästa</span>`;
+    // Update status bar
+    var sbEl = document.getElementById('statusGedcom' + side);
+    if (sbEl) sbEl.innerHTML = '<span style="color:var(--green)">📁 GEDCOM ' + side + ': ' + parsed.persons.length + ' pers.</span>';
+    document.getElementById('person' + side + 'SelectWrap').style.display = 'block';
+    // Update manual input GEDCOM status
+    var statusSpan = document.getElementById('gedcom' + side + 'Status');
+    if (statusSpan) { statusSpan.textContent = '(' + parsed.persons.length + ' pers. laddade)'; statusSpan.style.color = 'var(--green)'; }
+    var note = document.getElementById('gedcomSearchNote');
+    if (note && state.gedcomA && state.gedcomB) note.style.display = 'none';
+    document.getElementById('person' + side + 'Search').value = '';
+    document.getElementById('person' + side + 'Selected').classList.remove('visible');
+    renderPersonList(side, '');
+    updateTriGedcomCache();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// Build a flat sorted list for tri search
+function updateTriGedcomCache() {
+  state.triGedcomAll = [];
+  const add = (gedcom, sideLabel) => {
+    if (!gedcom) return;
+    (gedcom.sorted || gedcom.persons).forEach(p => {
+      state.triGedcomAll.push({ p, sideLabel });
+    });
+  };
+  add(state.gedcomA, 'A');
+  add(state.gedcomB, 'B');
+  state.triGedcomAll.sort((a,b) => a.p.name.localeCompare(b.p.name, 'sv'));
+}
+
+// Render filtered person list for A or B
+function renderPersonList(side, query) {
+  const gedcom = state['gedcom' + side];
+  if (!gedcom) return;
+  const list = document.getElementById('person' + side + 'List');
+  const countEl = document.getElementById('person' + side + 'Count');
+  const q = query.trim().toLowerCase();
+  const terms = q.split(/\s+/).filter(Boolean);
+
+  const matches = (gedcom.sorted || gedcom.persons).filter(p => {
+    if (!terms.length) return true;
+    const haystack = [p.name, p.bornPlace, p.diedPlace, String(p.born||''), String(p.died||'')]
+      .join(' ').toLowerCase();
+    return terms.every(t => haystack.includes(t));
+  });
+
+  countEl.textContent = matches.length + ' / ' + gedcom.persons.length + ' personer';
+  countEl.style.display = 'block';
+
+  list.innerHTML = '';
+  const show = matches.slice(0, 150); // cap for performance
+  show.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'person-search-item';
+    const birthInfo = [p.born ? 'f. ' + p.born : '', p.bornPlace ? p.bornPlace.split(',')[0] : ''].filter(Boolean).join(', ');
+    item.innerHTML = `<strong>${escH(p.name)}</strong>${birthInfo ? '<span class="birth-info"> · ' + escH(birthInfo) + '</span>' : ''}`;
+    item.onclick = () => selectPersonResult(side, p);
+    list.appendChild(item);
+  });
+  if (matches.length > 150) {
+    const more = document.createElement('div');
+    more.className = 'person-search-item';
+    more.style.color = 'var(--muted)';
+    more.style.fontStyle = 'italic';
+    more.textContent = `… ${matches.length - 150} till — förfina sökningen`;
+    list.appendChild(more);
+  }
+  list.classList.toggle('open', matches.length > 0 || q.length > 0);
+}
+
+function filterPersonSearch(side) {
+  const q = document.getElementById('person' + side + 'Search').value;
+  renderPersonList(side, q);
+}
+
+function openPersonSearch(side) {
+  const q = document.getElementById('person' + side + 'Search').value;
+  renderPersonList(side, q);
+}
+
+function selectPersonResult(side, person) {
+  state['person' + side] = person;
+  document.getElementById('person' + side + 'Search').value = person.name;
+  document.getElementById('person' + side + 'List').classList.remove('open');
+  const birthInfo = [person.born ? 'f. ' + person.born : '', person.bornPlace ? person.bornPlace.split(',')[0] : ''].filter(Boolean).join(', ');
+  const disp = document.getElementById('person' + side + 'Selected');
+  disp.textContent = '✓ Vald: ' + person.name + (birthInfo ? ' (' + birthInfo + ')' : '');
+  disp.classList.add('visible');
+  document.getElementById('name' + side).value = person.name + (person.born ? ` (f. ${person.born})` : '');
+  updateSessionMeta();
+}
+
+
+// Sex badge for geo display
+function sexBadge(sex) {
+  if (sex === 'M') return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#5b9bd5;margin-right:3px;vertical-align:middle" title="Man"></span>';
+  if (sex === 'F') return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e07ab0;margin-right:3px;vertical-align:middle" title="Kvinna"></span>';
+  return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#888;margin-right:3px;vertical-align:middle" title="Okänt kön"></span>';
+}
+
+// Sex pair label
+function sexPairLabel(sexA, sexB) {
+  if (sexA === 'M' && sexB === 'F') return '<span style="font-size:10px;color:var(--green);margin-left:4px">♂♀ möjligt par</span>';
+  if (sexA === 'F' && sexB === 'M') return '<span style="font-size:10px;color:var(--green);margin-left:4px">♀♂ möjligt par</span>';
+  if (sexA === 'M' && sexB === 'M') return '<span style="font-size:10px;color:var(--muted);margin-left:4px">♂♂ – kontrollera syskon</span>';
+  if (sexA === 'F' && sexB === 'F') return '<span style="font-size:10px;color:var(--muted);margin-left:4px">♀♀ – kontrollera syskon</span>';
+  return '';
+}
+
+// ── TRI GEDCOM SEARCH (per sida A eller B) ──
+function filterTriSearchSide(side) {
+  var gedcom = side === 'A' ? state.gedcomA : state.gedcomB;
+  var inputEl = document.getElementById('triGedcomSearch' + side);
+  var listEl  = document.getElementById('triGedcomList' + side);
+  if (!gedcom || !inputEl || !listEl) return;
+  var q = inputEl.value.trim().toLowerCase();
+  var terms = q.split(/\s+/).filter(Boolean);
+  var persons = gedcom.sorted || gedcom.persons;
+  var matches = persons.filter(function(p) {
+    if (!terms.length) return true;
+    var hay = [p.name, p.bornPlace, p.diedPlace, String(p.born||''), String(p.died||'')].join(' ').toLowerCase();
+    return terms.every(function(t){ return hay.includes(t); });
+  });
+  listEl.innerHTML = '';
+  matches.slice(0, 100).forEach(function(p) {
+    var item = document.createElement('div');
+    item.className = 'person-search-item';
+    var bi = [p.born ? 'f. '+p.born : '', p.bornPlace ? p.bornPlace.split(',')[0] : ''].filter(Boolean).join(', ');
+    item.innerHTML = '<strong>' + escH(p.name) + '</strong>' + (bi ? '<span class="birth-info"> · ' + escH(bi) + '</span>' : '');
+    item.onclick = (function(pp){ return function(){ selectTriPersonSide(side, pp); }; })(p);
+    listEl.appendChild(item);
+  });
+  listEl.classList.toggle('open', matches.length > 0);
+}
+
+function selectTriPersonSide(side, p) {
+  var inputEl = document.getElementById('triGedcomSearch' + side);
+  var listEl  = document.getElementById('triGedcomList' + side);
+  var dispEl  = document.getElementById('triGedcomSelected' + side);
+  var nameEl  = document.getElementById('triName');
+  if (inputEl) inputEl.value = p.name;
+  if (listEl)  listEl.classList.remove('open');
+  var bi = [p.born ? 'f. '+p.born : '', p.bornPlace ? p.bornPlace.split(',')[0] : ''].filter(Boolean).join(', ');
+  if (dispEl) { dispEl.textContent = '✓ ' + p.name + (bi ? ' ('+bi+')' : '') + ' [Träd '+side+']'; dispEl.classList.add('visible'); }
+  if (nameEl && !nameEl.value) nameEl.value = p.name;
+  if (!state.triGedcomPicks) state.triGedcomPicks = {};
+  state.triGedcomPicks[side] = { id: p.id, name: p.name, born: p.born, bornPlace: p.bornPlace, side: side };
+}
+
+// Keep stubs for old references
+function filterTriSearch() {}
+function openTriSearch() {}
+function selectTriGedcomResult() {}
+
+// ═══════════════════════════════════════════════
+// GEMENSAMMA DNA-TRÄFFAR
+// ═══════════════════════════════════════════════
+
+// state.matches = [ { name, testers:[{name, cm, segments:[{chr,cm,start,end,snps}]}], relA, relB, gedcomRef, side } ]
+
+function addManualSegmentRow() {
+  manualSegRows++;
+  const wrap = document.getElementById('manualSegments');
+  const div = document.createElement('div');
+  div.id = 'segrow_' + manualSegRows;
+  div.style.cssText = 'display:grid;grid-template-columns:80px 80px 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;padding:8px;background:var(--bg);border-radius:5px;border:1px solid var(--border)';
+  div.innerHTML = `
+    <div><label style="font-size:11px;color:var(--muted)">Kromosom</label>
+      <select style="padding:6px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;width:100%">
+        ${[...Array(22).keys()].map(i=>`<option>${i+1}</option>`).join('')}<option>X</option>
+      </select></div>
+    <div><label style="font-size:11px;color:var(--muted)">cM</label>
+      <input type="number" placeholder="cM" min="0" step="0.1" style="padding:6px;font-size:12px"></div>
+    <div><label style="font-size:11px;color:var(--muted)">Start position (bp)</label>
+      <input type="number" placeholder="t.ex. 99017212" min="0" style="padding:6px;font-size:12px"></div>
+    <div><label style="font-size:11px;color:var(--muted)">Slut position (bp)</label>
+      <input type="number" placeholder="t.ex. 106085022" min="0" style="padding:6px;font-size:12px"></div>
+    <div style="padding-bottom:2px"><button class="btn btn-sm" style="background:var(--accent);color:#fff;margin-top:18px" onclick="this.closest('[id^=segrow]').remove()">✕</button></div>
+  `;
+  wrap.appendChild(div);
+}
+
+function getManualSegments() {
+  const segs = [];
+  document.querySelectorAll('[id^=segrow_]').forEach(row => {
+    const inputs = row.querySelectorAll('input, select');
+    const chr = inputs[0].value;
+    const cm = parseFloat(inputs[1].value) || null;
+    const start = parseInt(inputs[2].value) || null;
+    const end = parseInt(inputs[3].value) || null;
+    if (chr) segs.push({ chr, cm, start, end, snps: null });
+  });
+  return segs;
+}
+
+function addManualMatch() {
+  var name = document.getElementById('triName').value.trim();
+  if (!name) { alert('Ange ett namn för träffen.'); return; }
+  var cmA  = parseFloat(document.getElementById('tri_cm_a').value) || null;
+  var cmB  = parseFloat(document.getElementById('tri_cm_b').value) || null;
+  var relA = document.getElementById('triRelA').value.trim();
+  var relB = document.getElementById('triRelB').value.trim();
+  var antrade = document.getElementById('triAntrade').value.trim();
+  var segs = getManualSegments();
+  var nameA = (document.getElementById('nameA').value || 'A').split('(')[0].trim();
+  var nameB = (document.getElementById('nameB').value || 'B').split('(')[0].trim();
+  if (cmA) addOrMergeMatchBatch(name, nameA, cmA, segs.map(function(s){ return Object.assign({},s); }));
+  if (cmB) addOrMergeMatchBatch(name, nameB, cmB, segs.map(function(s){ return Object.assign({},s); }));
+  if (!cmA && !cmB) addOrMergeMatchBatch(name, 'Manuell', null, segs);
+  var match = state.matches.find(function(m){ return m.name.toLowerCase() === name.toLowerCase(); });
+  if (match) {
+    if (relA) match.relA = relA;
+    if (relB) match.relB = relB;
+    if (antrade) match.antrade = antrade;
+    if (state.triGedcomPicks) {
+      if (state.triGedcomPicks.A) match.gedcomRefA = state.triGedcomPicks.A;
+      if (state.triGedcomPicks.B) match.gedcomRefB = state.triGedcomPicks.B;
+    }
+  }
+  state.matches.forEach(function(m){ computeMatchSide(m); });
+  renderMatchList();
+  updateTesterFilterButtons();
+  clearManualForm();
+}
+
+function clearManualForm() {
+  ['triName','triRelA','triRelB','tri_cm_a','tri_cm_b','triAntrade',
+   'triGedcomSearchA','triGedcomSearchB'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['triGedcomSelectedA','triGedcomSelectedB'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) { el.textContent = ''; el.classList.remove('visible'); }
+  });
+  ['triGedcomListA','triGedcomListB'].forEach(function(id) {
+    var el = document.getElementById(id); if (el) el.classList.remove('open');
+  });
+  var ms = document.getElementById('manualSegments');
+  if (ms) ms.innerHTML = '';
+  manualSegRows = 0;
+  state.triGedcomPicks = {};
+}
+
+function addOrMergeMatch(matchName, testerName, cm, segments, meta={}) {
+  let match = state.matches.find(m => m.name.toLowerCase() === matchName.toLowerCase());
+  if (!match) {
+    match = { name: matchName, testers: [], relA: meta.relA||'', relB: meta.relB||'',
+              gedcomRef: meta.gedcomRef||null, side: null, isPersonA: false, isPersonB: false };
+    state.matches.push(match);
+  }
+  if (meta.relA) match.relA = meta.relA;
+  if (meta.relB) match.relB = meta.relB;
+  if (meta.gedcomRef) match.gedcomRef = meta.gedcomRef;
+
+  let tester = match.testers.find(t => t.name === testerName);
+  if (!tester) {
+    tester = { name: testerName, cm: cm||0, segments: [] };
+    match.testers.push(tester);
+  }
+  if (cm) tester.cm = cm;
+  tester.segments.push(...segments);
+  computeMatchSide(match);
+  renderMatchList();
+  updateTesterFilterButtons();
+}
+
+function computeMatchSide(match) {
+  if (!match.testers.length) { match.side = null; return; }
+
+  // Priority 1: configured testers with known branches (Session-fliken)
+  if (state.testers && state.testers.length) {
+    var morBranches = ['mor','mormor','morfar','mormors_far','mormors_mor'];
+    var farBranches = ['far','farmor','farfar','farmors_far','farmors_mor'];
+    var hasMorMatch = false, hasFarMatch = false;
+    match.testers.forEach(function(t) {
+      var tConfig = state.testers.find(function(tc){
+        return tc.name.toLowerCase() === t.name.toLowerCase();
+      });
+      if (!tConfig || !tConfig.branch) return;
+      if (morBranches.indexOf(tConfig.branch) !== -1) hasMorMatch = true;
+      if (farBranches.indexOf(tConfig.branch) !== -1) hasFarMatch = true;
+    });
+    if (hasMorMatch && !hasFarMatch) { match.side = 'mor'; return; }
+    if (hasFarMatch && !hasMorMatch) { match.side = 'far'; return; }
+    if (hasMorMatch && hasFarMatch) { match.side = 'both'; return; }
+  }
+
+  // Priority 2: fallback on motherName (default 'Ulla') matched against
+  // tester names from CSV. If Ulla matches = mors sida, otherwise = fars sida.
+  // This works even without explicit tester configuration.
+  var motherName = (state.motherName || 'Ulla').toLowerCase().replace(/[*†°]+$/, '');
+  var motherMatches = match.testers.some(function(t) {
+    return t.name.toLowerCase().replace(/[*†°]+$/, '') === motherName;
+  });
+  // Only classify if we actually have more than one unique tester
+  // OR if the motherName tester is explicitly present
+  if (motherMatches) {
+    match.side = 'mor'; return;
+  }
+  // If we have testers but none is Ulla — could be fars sida,
+  // but only say so if we have loaded Ulla's CSV (i.e. 'Ulla' appears
+  // as a tester name in any match)
+  var ullaExists = state.matches.some(function(m) {
+    return m.testers.some(function(t){
+      return t.name.toLowerCase().replace(/[*†°]+$/, '') === motherName;
+    });
+  });
+  if (ullaExists) {
+    // Ulla's CSV is loaded but she doesn't match this person → fars sida
+    match.side = 'far'; return;
+  }
+  // No Ulla CSV loaded at all → unknown
+  match.side = null;
+}
+
+// ── CSV IMPORT ──
+
+function handleCsvFiles(files) {
+  const arr = Array.from(files);
+  if (!arr.length) { console.log('handleCsvFiles: inga filer mottagna'); return; }
+  console.log('handleCsvFiles: läser', arr.length, 'fil(er):', arr.map(f=>f.name));
+  arr.forEach(file => {
+    // Accept any file — let the parser validate content
+    const statusEl = document.getElementById('csvLoadedList');
+    statusEl.innerHTML += `<div style="margin-top:6px;color:var(--muted)" id="csv_loading_${escH(file.name).replace(/\W/g,'_')}">⏳ Läser <strong>${escH(file.name)}</strong>…</div>`;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = parseMyHeritageCsv(ev.target.result, file.name);
+      // Replace loading indicator
+      const loadingId = 'csv_loading_' + file.name.replace(/\W/g,'_');
+      const loadingEl = document.getElementById(loadingId);
+      if (loadingEl) loadingEl.remove();
+      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+    };
+    reader.onerror = (ev) => {
+      console.error('FileReader error:', ev);
+      updateCsvLoadedList(file.name, 0, 0, 'Kunde inte läsa filen (FileReader-fel)');
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+function parseMyHeritageCsv(text, filename) {
+  // Strip BOM
+  text = text.replace(/^\uFEFF/, '');
+  const lines = text.split(/\r?\n/);
+  const nonEmpty = lines.filter(l => l.trim());
+  if (nonEmpty.length < 2) return { matchCount: 0, segCount: 0, error: 'Tom fil' };
+
+  // Parse header — case-insensitive, trim whitespace and quotes
+  const rawHeader = nonEmpty[0];
+  const headerCols = splitCsvLine(rawHeader).map(h => h.trim().toLowerCase().replace(/^"+|"+$/g,''));
+
+  // Flexible column finder — matches partial names
+  const findCol = (...candidates) => {
+    for (const c of candidates) {
+      const i = headerCols.findIndex(h => h.includes(c));
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+
+  const iName  = findCol('name');                     // tester's own name
+  const iMatch = findCol('match name', 'matchname');  // the DNA match
+  const iChr   = findCol('chromosome', 'chr');
+  const iStart = findCol('start location', 'start');
+  const iEnd   = findCol('end location', 'end');
+  const iCm    = findCol('centimorgan', 'cm');
+  const iSnps  = findCol('snp');
+
+  console.log('CSV header cols:', headerCols);
+  console.log('Col indices — name:', iName, 'match:', iMatch, 'chr:', iChr,
+              'start:', iStart, 'end:', iEnd, 'cm:', iCm, 'snps:', iSnps);
+
+  if (iMatch === -1) return { matchCount: 0, segCount: 0, error: 'Kolumn "Match Name" hittades inte. Kontrollera att det är en MyHeritage segment-export.' };
+  if (iChr === -1)   return { matchCount: 0, segCount: 0, error: 'Kolumn "Chromosome" hittades inte.' };
+
+  const grouped = {};
+  let segCount = 0;
+
+  for (let i = 1; i < nonEmpty.length; i++) {
+    const row = splitCsvLine(nonEmpty[i]);
+    const matchName  = iMatch >= 0 ? row[iMatch]?.trim() : '';
+    const testerFull = iName  >= 0 ? row[iName]?.trim() : '';
+    const chr        = iChr   >= 0 ? row[iChr]?.trim()  : '';
+    const cmRaw      = iCm    >= 0 ? row[iCm]?.trim()   : '';
+    const startRaw   = iStart >= 0 ? row[iStart]?.trim(): '';
+    const endRaw     = iEnd   >= 0 ? row[iEnd]?.trim()  : '';
+    const snpsRaw    = iSnps  >= 0 ? row[iSnps]?.trim() : '';
+
+    if (!matchName || matchName === 'All selected DNA Matches') continue;
+    if (!chr) continue;
+
+    const cm    = parseFloat(cmRaw.replace(',', '.'))   || null;
+    const start = parseInt(startRaw.replace(/\s/g,''))  || null;
+    const end   = parseInt(endRaw.replace(/\s/g,''))    || null;
+    const snps  = parseInt(snpsRaw.replace(/\s/g,''))   || null;
+
+    const testerShort = shortName(testerFull) || 'Okänd';
+    const key = matchName + '|||' + testerShort;
+    if (!grouped[key]) grouped[key] = { matchName, testerName: testerShort, totalCm: 0, segments: [] };
+    grouped[key].segments.push({ chr, cm, start, end, snps });
+    if (cm) grouped[key].totalCm += cm;
+    segCount++;
+  }
+
+  const matchCount = Object.keys(grouped).length;
+  console.log('Parsed', matchCount, 'matches,', segCount, 'segments from', filename);
+
+  if (!matchCount) return { matchCount: 0, segCount: 0, error: 'Inga matchrader hittades i filen.' };
+
+  // Batch-add without re-rendering each time
+  Object.values(grouped).forEach(g => {
+    addOrMergeMatchBatch(g.matchName, g.testerName, g.totalCm, g.segments);
+  });
+
+  // Single render after all data is loaded
+  state.matches.forEach(m => computeMatchSide(m));
+  renderMatchList();
+  updateTesterFilterButtons();
+
+  if (!state.csvFiles) state.csvFiles = [];
+  state.csvFiles.push({ filename, matchCount, segCount });
+
+  return { matchCount, segCount, error: null };
+}
+
+// Batch version — does NOT call renderMatchList (caller does it once)
+function addOrMergeMatchBatch(matchName, testerName, cm, segments) {
+  // Clean tester name
+  testerName = (testerName || '').replace(/[*†°]+$/, '').trim() || testerName;
+  let match = state.matches.find(m => m.name.toLowerCase() === matchName.toLowerCase());
+  if (!match) {
+    match = { name: matchName, testers: [], relA: '', relB: '',
+              gedcomRef: null, side: null, isPersonA: false, isPersonB: false,
+              antrade: '' };
+    state.matches.push(match);
+  }
+  let tester = match.testers.find(t => t.name === testerName);
+  if (!tester) {
+    tester = { name: testerName, cm: cm || 0, segments: [] };
+    match.testers.push(tester);
+  }
+  if (cm) tester.cm = cm;
+  tester.segments.push(...segments);
+}
+
+function shortName(fullName) {
+  if (!fullName) return '';
+  // Strip trailing asterisks, stars, dots that MyHeritage sometimes adds
+  return fullName.trim().split(/\s+/)[0].replace(/[*†°]+$/, '');
+}
+
+function splitCsvLine(line) {
+  const result = [];
+  let cur = '', inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuote && line[i+1] === '"') { cur += '"'; i++; } // escaped quote
+      else inQuote = !inQuote;
+    } else if (c === ',' && !inQuote) {
+      result.push(cur); cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function updateCsvLoadedList(filename, matchCount, segCount, error) {
+  const el = document.getElementById('csvLoadedList');
+  if (error) {
+    el.innerHTML += `<div style="margin-top:6px;color:var(--red)">✗ <strong>${escH(filename)}</strong> — ${escH(error)}</div>`;
+  } else {
+    el.innerHTML += `<div style="margin-top:6px;color:var(--green)">✓ <strong>${escH(filename)}</strong> — ${matchCount} träffar, ${segCount} segment inlästa</div>`;
+  }
+}
+
+// ── RENDER MATCH LIST ──
+function setTesterFilter(tester, btn) {
+  activeTesterFilter = tester;
+  document.querySelectorAll('#testerFilter .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderMatchList();
+}
+
+function renderMatchCard(m, idx, overlapMap) {
+  // Find the "own" tester — first non-mother tester in this match
+  var motherNameNorm = (state.motherName || 'Ulla').toLowerCase().replace(/[*†°\s]+$/, '').trim();
+  var ownTester = m.testers.find(function(t){
+    return t.name.toLowerCase().replace(/[*†°\s]+$/, '').trim() !== motherNameNorm;
+  });
+  var ownName = ownTester ? ownTester.name : '';
+  var sideTag = m.side === 'mor'
+    ? '<span class="side-tag side-mor" title="' + escH(motherNameNorm.charAt(0).toUpperCase()+motherNameNorm.slice(1)) + ' matchar">Mors sida</span>'
+    : m.side === 'far'
+      ? '<span class="side-tag side-far" title="' + escH(ownName) + ' matchar, ' + (state.motherName||'Ulla') + ' matchar ej">' + (ownName ? escH(ownName) + 's' : '') + ' fars sida</span>'
+      : m.side === 'both'
+        ? '<span class="side-tag" style="background:rgba(180,130,220,0.2);color:#b482dc;border:1px solid #b482dc">Båda sidor?</span>'
+        : '<span class="side-tag side-unknown">Sida okänd</span>';
+
+  const testerBadges = m.testers.map(t => {
+    const color = testerColor(t.name);
+    const displayName = t.name.replace(/[*†°]+$/, '').trim();
+    return `<span class="tester-badge" style="background:${color.bg};color:${color.fg};border:1px solid ${color.border}">${escH(displayName)} ${t.cm ? t.cm.toFixed(1)+' cM' : ''}</span>`;
+  }).join('');
+
+
+  // Build segment tables per tester
+  // Antrade textarea — always visible directly under header, before segments
+  let antradeHtml = `<div style="padding:8px 14px 10px;border-top:1px solid var(--border);background:var(--bg2)">
+    <label style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px">
+      Känd härstamning / anträde
+    </label>
+    <textarea
+      style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:7px 10px;font-size:12px;font-family:var(--font);resize:vertical;min-height:52px;line-height:1.5"
+      placeholder="t.ex. ULLA Olsson 1932–2025 / KARL Olsson 1909–2001 / [OLA Jönsson 1822–1871] / ..."
+      oninput="App.updateMatchAntrade(${idx}, this.value)"
+      onclick="event.stopPropagation()"
+    >${escH(m.antrade||'')}</textarea>
+    <div style="font-size:10px;color:var(--muted);margin-top:2px">[ ] = gemensamma anor · Sparas i sessionen</div>
+  </div>`;
+  let segHtml = `<div style="padding:10px 14px 4px">
+    <div class="grid2" style="gap:8px;margin-bottom:10px">
+      <div class="field" style="margin:0"><label>Relation till A</label>
+        <input type="text" value="${escH(m.relA)}" placeholder="t.ex. 2:a kusin"
+          onchange="App.updateMatchMeta(${idx},'relA',this.value)" style="font-size:12px;padding:5px 8px"></div>
+      <div class="field" style="margin:0"><label>Relation till B</label>
+        <input type="text" value="${escH(m.relB)}" placeholder="t.ex. okänd"
+          onchange="App.updateMatchMeta(${idx},'relB',this.value)" style="font-size:12px;padding:5px 8px"></div>
+    </div>
+  </div>`;
+
+  m.testers.forEach(t => {
+    if (!t.segments.length) return;
+    const color = testerColor(t.name);
+    segHtml += `<div style="padding:4px 14px 4px;font-size:12px;font-weight:700;color:${color.fg}">${escH(t.name)}</div>`;
+    segHtml += `<table class="seg-table"><thead><tr>
+      <th>Chr</th><th>cM</th><th>Start (bp)</th><th>Slut (bp)</th><th>SNPs</th><th>Överlapp med</th>
+    </tr></thead><tbody>`;
+    t.segments.forEach(seg => {
+      const key = seg.chr + ':' + seg.start + '-' + seg.end;
+      const overlaps = overlapMap[m.name]?.[key] || [];
+      const overlapOthers = overlaps.filter(o => o !== m.name);
+      const rowClass = overlapOthers.length ? 'seg-overlap' : '';
+      segHtml += `<tr class="${rowClass}">
+        <td><span class="chr-badge">${escH(String(seg.chr))}</span></td>
+        <td>${seg.cm != null ? seg.cm.toFixed(1) : '—'}</td>
+        <td>${seg.start != null ? seg.start.toLocaleString('sv-SE') : '—'}</td>
+        <td>${seg.end != null ? seg.end.toLocaleString('sv-SE') : '—'}</td>
+        <td>${seg.snps != null ? seg.snps.toLocaleString('sv-SE') : '—'}</td>
+        <td>${overlapOthers.length ? '<span class="tag tag-yellow">▲ '+escH(overlapOthers.slice(0,3).join(', '))+(overlapOthers.length>3?'…':'')+'</span>' : '—'}</td>
+      </tr>`;
+    });
+    segHtml += `</tbody></table>`;
+  });
+
+  // Overlap alerts
+  const myOverlaps = collectMatchOverlaps(m, overlapMap);
+  const alertHtml = myOverlaps.map(o =>
+    `<div class="overlap-alert" style="margin:4px 14px">▲ <strong>${escH(m.name)}</strong> och <strong>${escH(o.other)}</strong> delar segment på kromosom <strong>${escH(String(o.chr))}</strong> (${(o.overlapStart/1e6).toFixed(1)}–${(o.overlapEnd/1e6).toFixed(1)} Mb${o.overlapCm ? ', ca '+o.overlapCm.toFixed(1)+' cM' : ''})</div>`
+  ).join('');
+
+  const cardId = 'mc_' + idx;
+
+  return `<div class="match-card">
+    <div class="match-card-header" onclick="App.toggleMatchCard('${cardId}')">
+      <div class="match-name">${escH(m.name)}</div>
+      ${sideTag}
+      <div class="match-testers">${testerBadges}</div>
+      <div style="display:flex;gap:4px;margin-left:4px"></div>
+      <button class="btn btn-sm" style="background:var(--accent);color:#fff;margin-left:4px" onclick="event.stopPropagation();App.removeMatch('${escH(m.name)}')">✕</button>
+    </div>
+    ${alertHtml}
+    <div class="match-segments" id="${cardId}">
+      ${antradeHtml}
+    ${segHtml || '<div style="padding:12px 14px;color:var(--muted);font-size:12px">Inga segmentdata.</div>'}
+    </div>
+  </div>`;
+}
+
+function toggleRole(idx, role) {
+  const m = state.matches[idx];
+  if (!m) return;
+  if (role === 'A') {
+    m.isPersonA = !m.isPersonA;
+    if (m.isPersonA) {
+      // Sync name to Person A field if empty
+      const nA = document.getElementById('nameA');
+      if (!nA.value) nA.value = m.name;
+    }
+  } else {
+    m.isPersonB = !m.isPersonB;
+    if (m.isPersonB) {
+      const nB = document.getElementById('nameB');
+      if (!nB.value) nB.value = m.name;
+    }
+  }
+  renderMatchList();
+}
+
+function updateMatchMeta(idx, field, value) {
+  const m = state.matches[idx];
+  if (m) m[field] = value;
+}
+
+function updateMatchAntrade(idx, value) {
+  const m = state.matches[idx];
+  if (m) m.antrade = value;
+}
+
+function toggleMatchCard(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+
+function removeMatch(name) {
+  state.matches = state.matches.filter(m => m.name !== name);
+  renderMatchList();
+  updateTesterFilterButtons();
+}
+
+// ── OVERLAP ANALYSIS ──
+function buildOverlapMap(matches) {
+  // overlapMap[matchName][segKey] = [otherMatchNames...]
+  const map = {};
+  for (let i = 0; i < matches.length; i++) {
+    const mA = matches[i];
+    for (const tA of mA.testers) {
+      for (const sA of tA.segments) {
+        for (let j = i + 1; j < matches.length; j++) {
+          const mB = matches[j];
+          for (const tB of mB.testers) {
+            for (const sB of tB.segments) {
+              if (sA.chr !== sB.chr) continue;
+              if (!sA.start || !sA.end || !sB.start || !sB.end) continue;
+              const oStart = Math.max(sA.start, sB.start);
+              const oEnd = Math.min(sA.end, sB.end);
+              if (oEnd > oStart) {
+                // Overlap found — avoid adding same other-match twice per segment
+                const keyA = sA.chr + ':' + sA.start + '-' + sA.end;
+                const keyB = sB.chr + ':' + sB.start + '-' + sB.end;
+                if (!map[mA.name]) map[mA.name] = {};
+                if (!map[mA.name][keyA]) map[mA.name][keyA] = [];
+                if (!map[mA.name][keyA].includes(mB.name)) map[mA.name][keyA].push(mB.name);
+                if (!map[mB.name]) map[mB.name] = {};
+                if (!map[mB.name][keyB]) map[mB.name][keyB] = [];
+                if (!map[mB.name][keyB].includes(mA.name)) map[mB.name][keyB].push(mA.name);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return map;
+}
+
+function collectMatchOverlaps(m, overlapMap) {
+  const results = [];
+  const seen = new Set();
+  if (!overlapMap[m.name]) return results;
+  for (const tA of m.testers) {
+    for (const sA of tA.segments) {
+      const key = sA.chr + ':' + sA.start + '-' + sA.end;
+      const others = overlapMap[m.name]?.[key] || [];
+      for (const other of others) {
+        // Deduplicate by other+chr+start+end (not just chr)
+        const seenKey = other + ':' + sA.chr + ':' + sA.start + ':' + sA.end;
+        if (seen.has(seenKey)) continue;
+        seen.add(seenKey);
+        // Find overlapping segment in other match
+        const otherMatch = state.matches.find(x => x.name === other);
+        if (!otherMatch) continue;
+        for (const tB of otherMatch.testers) {
+          for (const sB of tB.segments) {
+            if (sB.chr !== sA.chr) continue;
+            if (!sA.start || !sA.end || !sB.start || !sB.end) continue;
+            const oStart = Math.max(sA.start, sB.start);
+            const oEnd = Math.min(sA.end, sB.end);
+            if (oEnd > oStart) {
+              // Estimate cM proportionally
+              const fracA = (oEnd - oStart) / (sA.end - sA.start);
+              const overlapCm = sA.cm ? sA.cm * fracA : null;
+              results.push({ other, chr: sA.chr, overlapStart: oStart, overlapEnd: oEnd, overlapCm });
+            }
+          }
+        }
+      }
+    }
+  }
+  return results;
+}
+
+// Tester colors
+function testerColor(name) {
+  if (!testerColorCache[name]) {
+    testerColorCache[name] = TESTER_COLORS[testerColorIdx % TESTER_COLORS.length];
+    testerColorIdx++;
+  }
+  return testerColorCache[name];
+}
+
+function clearTriForm() {
+  ['triName','triRelA','triRelB','tri_cm_a','tri_cm_b','triGedcomSearchA','triGedcomSearchB'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  state.triGedcomPick = null;
+  const disp = document.getElementById('triGedcomSelected');
+  if (disp) { disp.textContent = ''; disp.classList.remove('visible'); }
+  const list = document.getElementById('triGedcomList');
+  if (list) list.classList.remove('open');
+}
+
+// ═══════════════════════════════════════════════
+// ANALYSIS ENGINE
+// ═══════════════════════════════════════════════
+
+// cM → relation table moved to top of script
+function estimateRelation(cm) {
+  if (!cm || cm <= 0) return null;
+  const hits = CM_RELATIONS.filter(r => cm >= r.min && cm <= r.max);
+  if (!hits.length) {
+    if (cm > 3900) return { rel: 'Troligen identiska tvillingar eller fel i data', conf: 'warn', gen: 0 };
+    // find nearest
+    let best = CM_RELATIONS.reduce((a,b) => Math.min(Math.abs(cm-a.min), Math.abs(cm-a.max)) < Math.min(Math.abs(cm-b.min), Math.abs(cm-b.max)) ? a : b);
+    return { rel: best.rel + ' (utanför typintervall)', conf: 'warn', gen: best.gen };
+  }
+  return { rel: hits.map(h=>h.rel).join(' eller '), conf: 'good', gen: hits[0].gen };
+}
+
+// Consistency check: known relation → expected cM range
+function expectedCmForRelation(relText) {
+  if (!relText) return null;
+  var r = relText.toLowerCase();
+  // Parents / children
+  if (r.includes('förälder') || r.includes('parent') || r.includes('child') ||
+      (r.includes('far') && r.includes('barn')) || (r.includes('mor') && r.includes('barn')))
+    return { min:1700, max:3900 };
+  // Siblings
+  if (r.includes('halvsyskon') || r.includes('half sib')) return { min:1160, max:1450 };
+  if (r.includes('syskon') || r.includes('sibling'))      return { min:1450, max:2050 };
+  // Grandparent
+  if (r.includes('farförälder') || r.includes('morförälder') || r.includes('grandparent') ||
+      r.includes('grandchild'))                            return { min:1160, max:1450 };
+  // 2-männing / Kusin (1st cousin)
+  if (r.includes('2-männing') || r.includes('1st cousin') ||
+      (/kusin/.test(r) && !r.includes('+') && !r.includes('syssling')))
+    return { min:575, max:1330 };
+  // 2-männing +1 / Kusin +1 (1st cousin once removed)
+  if ((r.includes('2-männing') && r.includes('+1')) ||
+      r.includes('1st cousin once') || (r.includes('kusin') && r.includes('+1')))
+    return { min:200, max:650 };
+  // 3-männing / Syssling (2nd cousin)
+  if (r.includes('3-männing') || r.includes('syssling') || r.includes('2nd cousin') ||
+      (/syssling/.test(r) && !r.includes('+')))
+    return { min:100, max:400 };
+  // 3-männing +1 / Syssling +1 (2nd cousin once removed)
+  if ((r.includes('syssling') && r.includes('+1')) ||
+      r.includes('2nd cousin once') || (r.includes('3-männing') && r.includes('+1')))
+    return { min:50, max:200 };
+  // 4-männing / Brylling (3rd cousin)
+  if (r.includes('4-männing') || r.includes('brylling') || r.includes('3rd cousin'))
+    return { min:20, max:175 };
+  // 4-männing +1 / Brylling +1 (3rd cousin once removed)
+  if ((r.includes('brylling') && r.includes('+1')) ||
+      r.includes('3rd cousin once') || (r.includes('4-männing') && r.includes('+1')))
+    return { min:10, max:80 };
+  // 5-männing / Pyssling (4th cousin)
+  if (r.includes('5-männing') || r.includes('pyssling') || r.includes('4th cousin'))
+    return { min:5, max:50 };
+  return null;
+}
+
+// Geographic temporal overlap
+function findGeoOverlap(gedcomA, gedcomB) {
+  if (!gedcomA || !gedcomB) return { strong: [], weak: [] };
+  var placesA = extractPlaceTimes(gedcomA.persons);
+  var placesB = extractPlaceTimes(gedcomB.persons);
+  var strong = []; // ≤10 years
+  var weak   = []; // 11–20 years
+  var seenStrong = new Set();
+  var seenWeak   = new Set();
+
+  for (var ai = 0; ai < placesA.length; ai++) {
+    var a = placesA[ai];
+    if (!a.place || isCemeteryPlace(a.place)) continue;
+    for (var bi = 0; bi < placesB.length; bi++) {
+      var b = placesB[bi];
+      if (!b.place || isCemeteryPlace(b.place)) continue;
+      var ap = normPlace(a.place), bp = normPlace(b.place);
+      if (!ap || !bp) continue;
+      if (ap !== bp && !ap.includes(bp) && !bp.includes(ap)) continue;
+      var placeKey = ap;
+      var diff = (a.year && b.year) ? Math.abs(a.year - b.year) : null;
+      if (diff === null) continue; // skip if no dates
+      if (diff <= 10 && !seenStrong.has(placeKey)) {
+        seenStrong.add(placeKey);
+        strong.push({ place: a.place, parish: displayParish(a.place), yearA: a.year, yearB: b.year, personA: a.person, sexA: a.sex, bornA: a.born, personB: b.person, sexB: b.sex, bornB: b.born, diff: diff });
+      } else if (diff <= 20 && !seenWeak.has(placeKey) && !seenStrong.has(placeKey)) {
+        seenWeak.add(placeKey);
+        weak.push({ place: a.place, parish: displayParish(a.place), yearA: a.year, yearB: b.year, personA: a.person, sexA: a.sex, bornA: a.born, personB: b.person, sexB: b.sex, bornB: b.born, diff: diff });
+      }
+    }
+  }
+  // Sort by diff ascending
+  strong.sort(function(a,b){ return a.diff - b.diff; });
+  weak.sort(function(a,b){ return a.diff - b.diff; });
+  return { strong: strong, weak: weak };
+}
+
+function extractPlaceTimes(persons) {
+  const pts = [];
+  for (const p of persons) {
+    const sex = p.sex || '';
+    const born = p.born || null;
+    const addPT = (year, place) => { if (place) pts.push({ person: p.name, year, place, sex, born }); };
+    addPT(p.born, p.bornPlace);
+    addPT(p.died, p.diedPlace);
+    for (const ev of p.events) addPT(ev.year, ev.place);
+  }
+  return pts;
+}
+
+// Cemetery keywords to exclude from geo analysis
+var CEMETERY_WORDS = ['kyrkogård','begravningsplats','cemetery','churchyard','begravning','grav','gravplats','krematorium'];
+
+function isCemeteryPlace(s) {
+  var low = s.toLowerCase();
+  return CEMETERY_WORDS.some(function(w){ return low.includes(w); });
+}
+
+// Extract the parish (församling) from a place string.
+// Format: "Gård/By, Församling (L)" or just "Församling (L)" or "Församling"
+// We want the LAST comma-separated part that looks like a parish name.
+function extractParish(s) {
+  if (!s) return '';
+  var parts = s.split(',').map(function(p){ return p.trim(); });
+  // Walk from the end — find the first part that looks like a parish
+  // (not a pure number, not empty, not a farm number like "6")
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var p = parts[i];
+    if (!p) continue;
+    // Skip if it's just a number or number+letter (farm designation)
+    if (/^\d+[a-zA-Z]?$/.test(p)) continue;
+    // Skip country names (Sverige, Denmark etc.) — too broad
+    if (/^(sverige|sweden|denmark|danmark|norge|norway|finland)$/i.test(p)) continue;
+    return p;
+  }
+  return parts[0] || s;
+}
+
+function normPlace(s) {
+  var parish = extractParish(s);
+  // Normalize: lowercase, collapse spaces, keep Swedish chars and parentheses content
+  // Keep the county letter e.g. "(L)" as part of the key so Vitaby (L) != Vitaby (M)
+  return parish.toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// For display: return just the parish name
+function displayParish(s) {
+  return extractParish(s);
+}
+
+// Barn utan far
+function findFatherlessMatches(gedcomBase, gedcomOther, windowYears = 16) {
+  // gedcomBase has children without father, gedcomOther has men to match
+  if (!gedcomBase || !gedcomOther) return [];
+  const results = [];
+  const childrenNoFather = gedcomBase.persons.filter(p => p.noFather && p.sex !== 'M');
+  const men = gedcomOther.persons.filter(p => p.sex === 'M');
+
+  for (const child of childrenNoFather) {
+    if (!child.born) continue;
+    const conceptionYear = child.born - 1;
+    const childPlace = normPlace(child.bornPlace || '');
+    if (!childPlace) continue;
+
+    for (const man of men) {
+      // Does man have any event near conceptionYear in a matching place?
+      const allEvents = [
+        { year: man.born, place: man.bornPlace },
+        { year: man.died, place: man.diedPlace },
+        ...man.events
+      ];
+      for (const ev of allEvents) {
+        if (!ev.place || !ev.year) continue;
+        if (Math.abs(ev.year - conceptionYear) > windowYears) continue;
+        const evPlace = normPlace(ev.place);
+        if (!evPlace) continue;
+        if (evPlace === childPlace || evPlace.includes(childPlace) || childPlace.includes(evPlace)) {
+          // Find mother
+          const mother = gedcomBase.persons.find(p => p.id === gedcomBase.families?.[child.motherFamId]?.wife);
+          const motherName = mother ? mother.name : 'okänd moder';
+          results.push({
+            child: child.name,
+            childBorn: child.born,
+            childPlace: child.bornPlace,
+            man: man.name,
+            manEvent: ev,
+            conceptionYear,
+            motherName
+          });
+          break;
+        }
+      }
+    }
+  }
+  return results;
+}
+
+function runAnalysis() {
+  showTab('analys');
+  document.getElementById('analysisOutput').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:40px;margin-bottom:12px">⏳</div><div style="font-size:14px">Analyserar...</div></div>';
+  // Defer actual analysis so spinner renders first
+  setTimeout(function() { runAnalysisCore(); }, 50);
+}
+
+
+// ═══════════════════════════════════════════════
+// GRENANANALYS
+// ═══════════════════════════════════════════════
+
+// Walk GEDCOM tree upward from a person, return sets of IDs per branch
+function getBranches(gedcom, personId) {
+  if (!gedcom || !personId) return null;
+  var persons = gedcom.persons;
+  var families = gedcom.families || {};
+
+  function findPerson(id) { return persons.find(function(p){ return p.id === id; }); }
+
+  // Get parents of a person via FAMC
+  function getParents(p) {
+    if (!p || !p.famc || !p.famc.length) return { father: null, mother: null };
+    var fam = families[p.famc[0]];
+    if (!fam) return { father: null, mother: null };
+    return {
+      father: fam.husb ? findPerson(fam.husb) : null,
+      mother: fam.wife ? findPerson(fam.wife) : null
+    };
+  }
+
+  // Get all ancestors on a given branch as flat array
+  function getAncestors(p, depth) {
+    if (!p || depth > 12) return [];
+    var results = [p];
+    var parents = getParents(p);
+    if (parents.father) results = results.concat(getAncestors(parents.father, depth+1));
+    if (parents.mother) results = results.concat(getAncestors(parents.mother, depth+1));
+    return results;
+  }
+
+  var root = findPerson(personId);
+  if (!root) return null;
+  var rootParents = getParents(root);
+  if (!rootParents.father && !rootParents.mother) return null;
+
+  var fatherParents = rootParents.father ? getParents(rootParents.father) : { father: null, mother: null };
+  var motherParents = rootParents.mother ? getParents(rootParents.mother) : { father: null, mother: null };
+
+  return {
+    farfar: fatherParents.father ? getAncestors(fatherParents.father, 0) : [],
+    farmor: fatherParents.mother ? getAncestors(fatherParents.mother, 0) : [],
+    morfar: motherParents.father ? getAncestors(motherParents.father, 0) : [],
+    mormor: motherParents.mother ? getAncestors(motherParents.mother, 0) : [],
+    far:    rootParents.father ? [rootParents.father] : [],
+    mor:    rootParents.mother ? [rootParents.mother] : []
+  };
+}
+
+// Score each branch based on geo overlap with B's GEDCOM and DNA match side
+
+// ═══════════════════════════════════════════════
+// TESTPERSONER MED GRENAR
+// ═══════════════════════════════════════════════
+var BRANCH_LABELS = {
+  'farfar':'Farfars sida','farmor':'Farmors sida',
+  'farmors_far':'Farmors farsida','farmors_mor':'Farmors morsida',
+  'morfar':'Morfars sida','mormor':'Mormors sida',
+  'mormors_far':'Mormors farsida','mormors_mor':'Mormors morsida',
+  'mor':'Mors sida','far':'Fars sida',''  :'Okänd'
+};
+
+
+// Clean asterisks from already-loaded tester names in state
+function cleanTesterNames() {
+  state.matches.forEach(function(m) {
+    m.testers.forEach(function(t) {
+      t.name = t.name.replace(/[*†°]+$/, '').trim();
+    });
+    computeMatchSide(m);
+  });
+  if (state.testerColorCache) {
+    // Re-key color cache without asterisks
+    Object.keys(state.testerColorCache || {}).forEach(function(k) {
+      var clean = k.replace(/[*†°]+$/, '').trim();
+      if (clean !== k) {
+        testerColorCache[clean] = testerColorCache[k];
+        delete testerColorCache[k];
+      }
+    });
+  }
+}
+
+function addTesterBranch() {
+  var name   = document.getElementById('newTesterName').value.trim();
+  var branch = document.getElementById('newTesterBranch').value;
+  var note   = document.getElementById('newTesterNote').value.trim();
+  if (!name) { alert('Ange ett förnamn.'); return; }
+  // Remove existing entry with same name
+  state.testers = state.testers.filter(function(t){ return t.name.toLowerCase() !== name.toLowerCase(); });
+  state.testers.push({ name: name, branch: branch, note: note });
+  // Update motherName: person with mor/mormor/morfar branch
+  var morPerson = state.testers.find(function(t){ return t.branch === 'mor' || t.branch === 'mormor' || t.branch === 'morfar'; });
+  if (morPerson) { state.motherName = morPerson.name; state.motherNameSetByUser = true; }
+  renderTesterBranchList();
+  document.getElementById('newTesterName').value = '';
+  document.getElementById('newTesterBranch').value = '';
+  document.getElementById('newTesterNote').value = '';
+  // Re-compute match sides
+  state.matches.forEach(function(m){ computeMatchSide(m); });
+  renderMatchList();
+}
+
+function renderTesterBranchList() {
+  var el = document.getElementById('testerBranchList');
+  if (!el) return;
+  if (!state.testers.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px">Inga testpersoner tillagda ännu.</div>';
+    return;
+  }
+  el.innerHTML = state.testers.map(function(t, i) {
+    var col = testerColor(t.name);
+    var brLabel = BRANCH_LABELS[t.branch] || 'Okänd';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)">' +
+      '<span class="tester-badge" style="background:'+col.bg+';color:'+col.fg+';border:1px solid '+col.border+'">'+escH(t.name)+'</span>' +
+      '<span style="font-size:12px;color:var(--accent2)">'+escH(brLabel)+'</span>' +
+      (t.note ? '<span style="font-size:11px;color:var(--muted)">'+escH(t.note)+'</span>' : '') +
+      '<button class="btn btn-sm" style="background:var(--accent);color:#fff;margin-left:auto" onclick="App.removeTesterBranch('+i+')">✕</button>' +
+      '</div>';
+  }).join('');
+}
+
+function removeTesterBranch(i) {
+  state.testers.splice(i, 1);
+  renderTesterBranchList();
+}
+
+function scoreBranches(branchesA, gedcomB, matches, motherName) {
+  if (!branchesA || !gedcomB) return null;
+  var branchNames = { farfar:'Farfars sida', farmor:'Farmors sida', morfar:'Morfars sida', mormor:'Mormors sida' };
+  var scores = {};
+
+  // Which side do our matches point to?
+  // Use tester branch knowledge to weight sides more precisely
+  var branchScores = { farfar:0, farmor:0, farmors_far:0, farmors_mor:0,
+                       morfar:0, mormor:0, mormors_far:0, mormors_mor:0 };
+  var hasDetailedBranches = false;
+  if (state.testers && state.testers.length) {
+    state.testers.forEach(function(tester) {
+      if (!tester.branch) return;
+      var matchesForTester = matches.filter(function(m){
+        return m.testers.some(function(t){ return t.name === tester.name; });
+      });
+      if (matchesForTester.length && branchScores.hasOwnProperty(tester.branch)) {
+        branchScores[tester.branch] += matchesForTester.length;
+        hasDetailedBranches = true;
+      }
+    });
+  }
+  var morMatches  = matches.filter(function(m){ return m.side === 'mor'; }).length;
+  var farMatches  = matches.filter(function(m){ return m.side === 'far'; }).length;
+  var totalSided  = morMatches + farMatches;
+  var farWeight   = totalSided ? farMatches / totalSided : 0.5;
+  var morWeight   = totalSided ? morMatches / totalSided : 0.5;
+
+  var placesB = extractPlaceTimes(gedcomB.persons);
+  Object.keys(branchNames).forEach(function(branch) {
+    var ancestors = branchesA[branch] || [];
+    if (!ancestors.length) { scores[branch] = { score: 0, label: branchNames[branch], ancestors: 0, geoHits: 0, reasons: [] }; return; }
+
+    var reasons = [];
+    var score = 0;
+
+    // DNA side weight — use detailed branch knowledge if available
+    var isFarSide = branch === 'farfar' || branch === 'farmor' || branch === 'farmors_far' || branch === 'farmors_mor';
+    var isMorSide = branch === 'morfar' || branch === 'mormor' || branch === 'mormors_far' || branch === 'mormors_mor';
+    if (hasDetailedBranches) {
+      // Use specific branch match count
+      var specificCount = branchScores[branch] || 0;
+      // Also count related branches (e.g. farmors_far contributes to farmor)
+      var parentBranch = branch.includes('_') ? branch.split('_')[0] : null;
+      if (parentBranch && branchScores[parentBranch]) specificCount += branchScores[parentBranch] * 0.5;
+      if (specificCount > 0) {
+        var pts = Math.min(50, specificCount * 15);
+        score += pts;
+        reasons.push('Testpersoner med känd gren pekar hit: ' + specificCount + ' träffar');
+      }
+    } else {
+      // Fall back to simple far/mor weighting
+      if (isFarSide && farWeight > 0.5) {
+        score += Math.round(farWeight * 40);
+        reasons.push('DNA-träffar pekar mot fars sida (' + farMatches + ' av ' + totalSided + ' träffar)');
+      } else if (isMorSide && morWeight > 0.5) {
+        score += Math.round(morWeight * 40);
+        reasons.push('DNA-träffar pekar mot mors sida (' + morMatches + ' av ' + totalSided + ' träffar)');
+      } else if (totalSided === 0) {
+        score += 10;
+        reasons.push('DNA-sida okänd — ingen mor-testperson laddad');
+      }
+    }
+
+    // Geo overlap
+    var placesA = extractPlaceTimes(ancestors);
+    var geoHits = 0;
+    var geoPlaces = new Set();
+    placesA.forEach(function(a) {
+      if (!a.place || isCemeteryPlace(a.place)) return;
+      placesB.forEach(function(b) {
+        if (!b.place || isCemeteryPlace(b.place)) return;
+        var ap = normPlace(a.place), bp = normPlace(b.place);
+        if (!ap || !bp) return;
+        if (ap === bp || ap.includes(bp) || bp.includes(ap)) {
+          if (!a.year || !b.year || Math.abs(a.year - b.year) <= 20) {
+            geoHits++;
+            geoPlaces.add(displayParish(a.place));
+          }
+        }
+      });
+    });
+    if (geoHits > 0) {
+      var geoScore = Math.min(40, geoHits * 8);
+      score += geoScore;
+      reasons.push('Geografisk överlapp: ' + Array.from(geoPlaces).slice(0,3).join(', ') + ' (' + geoHits + ' ortsträff' + (geoHits>1?'ar':'') + ')');
+    }
+
+    // Ancestor count bonus (more known ancestors = more to compare)
+    var ancBonus = Math.min(10, Math.floor(ancestors.length / 3));
+    if (ancBonus > 0) {
+      score += ancBonus;
+      reasons.push(ancestors.length + ' kända anor på denna gren');
+    }
+
+    scores[branch] = { score: Math.max(0, score), label: branchNames[branch], ancestors: ancestors.length, geoHits: geoHits, reasons: reasons };
+  });
+
+  // Normalize to percentages
+  var total = Object.values(scores).reduce(function(s,v){ return s + v.score; }, 0);
+  if (total > 0) {
+    Object.keys(scores).forEach(function(k){
+      scores[k].pct = Math.round(scores[k].score / total * 100);
+    });
+  } else {
+    Object.keys(scores).forEach(function(k){ scores[k].pct = 25; });
+  }
+  return scores;
+}
+
+function runAnalysisCore() {
+  const nameA = document.getElementById('nameA').value || 'Person A';
+  const nameB = document.getElementById('nameB').value || 'Person B';
+  const ab_cm = parseFloat(document.getElementById('ab_cm').value) || null;
+  const ab_seg = parseInt(document.getElementById('ab_seg').value) || null;
+  const ab_longest = parseFloat(document.getElementById('ab_longest').value) || null;
+
+  let html = `<div class="card"><div class="card-title">🔍 Analysresultat — ${escH(nameA)} ↔ ${escH(nameB)}</div>`;
+
+  // ── 1. RELATIONSUPPSKATTNING ──
+  html += `<div class="analysis-block"><h3>📊 1. Relationsuppskattning</h3><div class="analysis-result">`;
+  if (ab_cm) {
+    const est = estimateRelation(ab_cm);
+    html += `<div class="finding ${est.conf === 'good' ? 'good' : 'warn'}">
+      <strong>${ab_cm} cM</strong>${ab_seg ? `, ${ab_seg} segment` : ''}${ab_longest ? `, längsta: ${ab_longest} cM` : ''}<br>
+      Trolig relation: <strong>${est.rel}</strong>
+    </div>`;
+    if (ab_longest && ab_longest > 100) {
+      html += `<div class="finding good">Längsta segmentet (${ab_longest} cM) indikerar att en av de gemensamma grenarna är relativt nära.</div>`;
+    }
+    if (ab_seg && ab_cm && ab_longest) {
+      const avg = (ab_cm / ab_seg).toFixed(1);
+      html += `<div class="finding">Genomsnittlig segmentlängd: <strong>${avg} cM</strong> — ${avg > 30 ? 'tyder på relativt nära relation' : avg > 15 ? 'normalt för kusiner' : 'kan tyda på mer avlägsen relation eller endogami'}.</div>`;
+    }
+  } else {
+    html += `<div class="finding warn">Inga DNA-värden för A↔B har angetts.</div>`;
+  }
+  html += `</div></div>`;
+
+  // ── 2. GEMENSAMMA TRÄFFAR & TRIANGULERING ──
+  html += `<div class="analysis-block"><h3>🧩 2. Gemensamma DNA-träffar & triangulering</h3><div class="analysis-result">`;
+  if (!state.matches.length) {
+    html += `<div class="finding">Inga gemensamma DNA-träffar inlagda.</div>`;
+  } else {
+    const morSide = state.matches.filter(m => m.side === 'mor');
+    const farSide = state.matches.filter(m => m.side === 'far');
+    const unknown = state.matches.filter(m => !m.side);
+    // Cross-file: matches appearing in 2+ testers
+    const multiTester = state.matches.filter(m => m.testers.length > 1);
+    if (multiTester.length) {
+      html += `<div class="finding good">🔗 <strong>${multiTester.length} träff(ar) bekräftade av flera testpersoner</strong> (starkare signal):<br>
+        ${multiTester.map(m => `<span class="tag tag-green">${escH(m.name)} (${m.testers.map(t=>escH(t.name)).join(', ')})</span>`).join('')}
+      </div>`;
+    }
+    // Show known pedigrees
+    const withAntrade = state.matches.filter(m => m.antrade && m.antrade.trim());
+    if (withAntrade.length) {
+      html += `<div style="font-size:12px;font-weight:700;color:var(--accent2);margin:10px 0 5px">📜 Kända härstamningar:</div>`;
+      withAntrade.forEach(m => {
+        html += `<div class="finding good" style="margin-bottom:6px">
+          <strong>${escH(m.name)}</strong><br>
+          <span style="font-size:11px;white-space:pre-wrap;color:var(--text)">${escH(m.antrade)}</span>
+        </div>`;
+      });
+    }
+    if (morSide.length) html += `<div class="finding good"><strong>${morSide.length} träff(ar) på mors sida:</strong> ${morSide.map(m=>`<span class="tag tag-green">${escH(m.name)}</span>`).join('')}</div>`;
+    if (farSide.length) html += `<div class="finding good"><strong>${farSide.length} träff(ar) på fars sida:</strong> ${farSide.map(m=>`<span class="tag tag-green">${escH(m.name)}</span>`).join('')}</div>`;
+    if (unknown.length) html += `<div class="finding warn"><strong>${unknown.length} träff(ar) med okänd sida:</strong> ${unknown.map(m=>`<span class="tag tag-yellow">${escH(m.name)}</span>`).join('')}</div>`;
+
+    // Triangulation overlaps
+    const overlapMap = buildOverlapMap(state.matches);
+    const triPairs = new Set();
+    state.matches.forEach(m => {
+      const overlaps = collectMatchOverlaps(m, overlapMap);
+      overlaps.forEach(o => {
+        const key = [m.name, o.other].sort().join('|||');
+        if (!triPairs.has(key)) {
+          triPairs.add(key);
+          html += `<div class="finding good">▲ <strong>Triangulering:</strong> ${escH(m.name)} och ${escH(o.other)} delar segment på kromosom ${escH(String(o.chr))} (${(o.overlapStart/1e6).toFixed(1)}–${(o.overlapEnd/1e6).toFixed(1)} Mb${o.overlapCm ? ', ca '+o.overlapCm.toFixed(1)+' cM' : ''})</div>`;
+        }
+      });
+    });
+    if (!triPairs.size) html += `<div class="finding">Inga överlappande segment hittades mellan träffarna.</div>`;
+  }
+  html += `</div></div>`;
+
+  // ── 3. KONSISTENSKONTROLL ──
+  html += `<div class="analysis-block"><h3>✅ 3. Konsistenskontroll</h3><div class="analysis-result">`;
+  let consistencyIssues = 0;
+  for (const m of state.matches) {
+    const checks = [
+      { rel: m.relA, label: `A↔${m.name}` },
+      { rel: m.relB, label: `B↔${m.name}` }
+    ];
+    for (const chk of checks) {
+      if (!chk.rel) continue;
+      const totalCm = m.testers.reduce((s,t) => s+(t.cm||0), 0);
+      const exp = expectedCmForRelation(chk.rel);
+      if (!exp || !totalCm) continue;
+      if (totalCm < exp.min || totalCm > exp.max) {
+        consistencyIssues++;
+        html += `<div class="finding bad">⚠ <strong>${escH(chk.label)}:</strong> Angiven relation "${escH(chk.rel)}" förväntar ${exp.min}–${exp.max} cM men uppmätt ca ${totalCm.toFixed(0)} cM — <strong>avviker</strong>.</div>`;
+      } else {
+        html += `<div class="finding good">✓ <strong>${escH(chk.label)}:</strong> ca ${totalCm.toFixed(0)} cM stämmer med "${escH(chk.rel)}" (förväntat ${exp.min}–${exp.max} cM).</div>`;
+      }
+    }
+  }
+  if (!consistencyIssues && state.matches.length) html += `<div class="finding good">Inga konsistensfel i de relationer som har angiven relation och DNA-data.</div>`;
+  if (!state.matches.length) html += `<div class="finding">Inga träffar att kontrollera.</div>`;
+  html += `</div></div>`;
+
+  // ── 4. GEOGRAFISK-TEMPORAL ANALYS ──
+  var placesB = state.gedcomB ? extractPlaceTimes(state.gedcomB.persons) : [];
+  html += `<div class="analysis-block"><h3>🗺 4. Geografisk-temporal analys</h3><div class="analysis-result">
+    <div class="finding" style="font-size:11px;color:var(--muted);border-left-color:var(--muted);background:transparent;padding:4px 8px;margin-bottom:8px">
+      Jämför orter i A:s och B:s GEDCOM-träd. <span style="font-size:10px">Kön: <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#5b9bd5;vertical-align:middle"></span> Man &nbsp;<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#e07ab0;vertical-align:middle"></span> Kvinna &nbsp;<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#888;vertical-align:middle"></span> Okänt</span><br>Två grupper: <strong>Stark träff</strong> (≤10 år — troligen samma generation) och <strong>Möjlig träff</strong> (11–20 år — kan vara relaterade generationer). Kyrkogårdar exkluderas.
+    </div>`;
+  if (!state.gedcomA || !state.gedcomB) {
+    html += `<div class="finding warn">Ladda GEDCOM-filer för A och B för att köra geografisk analys.</div>`;
+  } else {
+    var geoResult = findGeoOverlap(state.gedcomA, state.gedcomB);
+    var strongHits = geoResult.strong;
+    var weakHits   = geoResult.weak;
+    if (!strongHits.length && !weakHits.length) {
+      html += `<div class="finding warn">Inga geografiska överlapp hittades med de laddade GEDCOM-filerna.</div>`;
+    } else {
+      var pA = state.matches.find(function(m){ return m.isPersonA; });
+      var pB = state.matches.find(function(m){ return m.isPersonB; });
+      var knownSide = pA ? pA.side : (pB ? pB.side : null);
+      if (knownSide === 'mor') html += `<div class="finding">A/B troligen på <strong>mors sida</strong> — fokusera på mors anor i träden.</div>`;
+      else if (knownSide === 'far') html += `<div class="finding">A/B troligen på <strong>fars sida</strong> — fokusera på fars anor i träden.</div>`;
+
+      if (strongHits.length) {
+        html += `<div style="font-size:12px;font-weight:700;color:var(--green);margin:10px 0 5px">✓ Starka träffar (≤10 år skillnad) — ${strongHits.length} ort${strongHits.length>1?'er':''}</div>`;
+        strongHits.slice(0,15).forEach(function(m) {
+          html += `<div class="finding good"><strong>${escH(m.parish||m.place.split(',')[0])}</strong>
+            ${sexPairLabel(m.sexA, m.sexB)}
+            <span style="color:var(--muted);font-size:11px"> · platsår ${m.yearA||'?'} / ${m.yearB||'?'} (${m.diff} års skillnad)</span><br>
+            <span style="font-size:11px">${sexBadge(m.sexA)}${escH(m.personA)}${m.bornA ? ' <em>f '+m.bornA+'</em>' : ''} (A) &nbsp;·&nbsp; ${sexBadge(m.sexB)}${escH(m.personB)}${m.bornB ? ' <em>f '+m.bornB+'</em>' : ''} (B)</span></div>`;
+        });
+        if (strongHits.length > 15) html += `<div style="color:var(--muted);font-size:11px;margin:2px 0 6px">...och ${strongHits.length-15} till.</div>`;
+      }
+
+      if (weakHits.length) {
+        html += `<div style="font-size:12px;font-weight:700;color:var(--yellow);margin:10px 0 5px">~ Möjliga träffar (11–20 år skillnad) — ${weakHits.length} ort${weakHits.length>1?'er':''}</div>`;
+        weakHits.slice(0,15).forEach(function(m) {
+          html += `<div class="finding warn"><strong>${escH(m.parish||m.place.split(',')[0])}</strong>
+            ${sexPairLabel(m.sexA, m.sexB)}
+            <span style="color:var(--muted);font-size:11px"> · platsår ${m.yearA||'?'} / ${m.yearB||'?'} (${m.diff} års skillnad)</span><br>
+            <span style="font-size:11px">${sexBadge(m.sexA)}${escH(m.personA)}${m.bornA ? ' <em>f '+m.bornA+'</em>' : ''} (A) &nbsp;·&nbsp; ${sexBadge(m.sexB)}${escH(m.personB)}${m.bornB ? ' <em>f '+m.bornB+'</em>' : ''} (B)</span></div>`;
+        });
+        if (weakHits.length > 15) html += `<div style="color:var(--muted);font-size:11px;margin:2px 0 6px">...och ${weakHits.length-15} till.</div>`;
+      }
+    }
+  }
+  html += `</div></div>`;
+
+  // ── 4b. GRENANANALYS ──
+  html += `<div class="analysis-block"><h3>🌿 4b. Grenananalys — sannolik gren</h3><div class="analysis-result">
+    <div class="finding" style="font-size:11px;color:var(--muted);border-left-color:var(--muted);background:transparent;padding:4px 8px;margin-bottom:8px">
+      Procentsatserna visar hur sannolikt det är att det gemensamma upphovet finns på respektive gren, baserat på tre faktorer: vart DNA-träffarna pekar (mors/fars sida via testpersonerna), geografiska överlapp med B:s träd, och hur många kända anor som finns på grenen att jämföra med.
+    </div>`;
+  var personAId = state.personA ? state.personA.id : null;
+  var personBId = state.personB ? state.personB.id : null;
+  var branchesA = state.gedcomA ? getBranches(state.gedcomA, personAId) : null;
+  var branchesB = state.gedcomB ? getBranches(state.gedcomB, personBId) : null;
+
+  if (!branchesA && !branchesB) {
+    html += `<div class="finding warn">Ladda GEDCOM-filer och välj Person A och B i träden för grenananalys.</div>`;
+  } else {
+    var scoresA = branchesA ? scoreBranches(branchesA, state.gedcomB || state.gedcomA, state.matches, state.motherName) : null;
+    var scoresB = branchesB ? scoreBranches(branchesB, state.gedcomA || state.gedcomB, state.matches, state.motherName) : null;
+
+    // Show A's branches
+    if (scoresA) {
+      html += `<div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:8px">Sett från ${escH(nameA)}s perspektiv:</div>`;
+      var sortedA = Object.entries(scoresA).sort(function(a,b){ return b[1].pct - a[1].pct; });
+      sortedA.forEach(function(entry) {
+        var k = entry[0], v = entry[1];
+        var barColor = v.pct > 50 ? 'var(--green)' : v.pct > 25 ? 'var(--gold)' : 'var(--muted)';
+        var cls = v.pct > 50 ? 'good' : v.pct > 25 ? 'warn' : '';
+        html += `<div class="finding ${cls}" style="margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <strong style="min-width:120px">${escH(v.label)}</strong>
+            <div style="flex:1;background:var(--bg);border-radius:4px;height:12px;overflow:hidden">
+              <div style="width:${v.pct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.5s"></div>
+            </div>
+            <strong style="min-width:40px;text-align:right;color:${barColor}">${v.pct}%</strong>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${v.ancestors} anor · ${v.geoHits} geo-träffar · ${v.reasons.join(' · ') || 'Ingen data'}</div>
+        </div>`;
+      });
+    }
+
+    // Sub-branch if one dominates clearly (>50%)
+    if (scoresA) {
+      var topBranch = Object.entries(scoresA).sort(function(a,b){ return b[1].pct-a[1].pct; })[0];
+      if (topBranch && topBranch[1].pct > 45) {
+        // Try to go one level deeper: grandparent's parents
+        var topKey = topBranch[0]; // e.g. 'farmor'
+        var topAncestors = branchesA[topKey] || [];
+        if (topAncestors.length > 1) {
+          // The first ancestor is the grandparent — get their parents from GEDCOM
+          var grandparent = topAncestors[0];
+          var gpParents = { father: null, mother: null };
+          if (grandparent && grandparent.famc && grandparent.famc.length && state.gedcomA.families) {
+            var fam = state.gedcomA.families[grandparent.famc[0]];
+            if (fam) {
+              var allP = state.gedcomA.persons;
+              gpParents.father = fam.husb ? allP.find(function(p){ return p.id===fam.husb; }) : null;
+              gpParents.mother = fam.wife  ? allP.find(function(p){ return p.id===fam.wife;  }) : null;
+            }
+          }
+          if (gpParents.father || gpParents.mother) {
+            html += `<div style="font-size:12px;font-weight:700;color:var(--accent2);margin:10px 0 6px">Djupare analys inom ${escH(topBranch[1].label)}:</div>`;
+            [['farfars sida', gpParents.father], ['farmors sida', gpParents.mother]].forEach(function(pair) {
+              var lbl = pair[0], gp = pair[1];
+              if (!gp) return;
+              // Count geo hits for this sub-branch
+              var subAnc = [gp];
+              var subPlaces = extractPlaceTimes(subAnc);
+              var subHits = 0;
+              var subPlaceNames = new Set();
+              subPlaces.forEach(function(a) {
+                if (!a.place || isCemeteryPlace(a.place)) return;
+                placesB.forEach(function(b) {
+                  if (!b.place || isCemeteryPlace(b.place)) return;
+                  if (normPlace(a.place) === normPlace(b.place)) {
+                    if (!a.year || !b.year || Math.abs(a.year-b.year)<=20) {
+                      subHits++; subPlaceNames.add(a.place.split(',')[0]);
+                    }
+                  }
+                });
+              });
+              html += `<div class="finding" style="margin-left:16px">
+                <strong>${escH(gp.name)}</strong>${gp.born ? ' f. '+gp.born : ''}
+                ${subHits > 0 ? ' — geo-träffar: <strong>' + Array.from(subPlaceNames).join(', ') + '</strong>' : ' — inga geo-träffar'}
+              </div>`;
+            });
+          }
+        }
+      }
+    }
+  }
+  html += `</div></div>`;
+
+    // ── 5. BARN UTAN FAR ──
+  html += `<div class="analysis-block"><h3>👶 5. Barn utan fadersuppgift</h3><div class="analysis-result">`;
+  if (!state.gedcomA || !state.gedcomB) {
+    html += `<div class="finding warn">Ladda GEDCOM-filer för att köra analys av barn utan far.</div>`;
+  } else {
+    // Search both directions
+    const matchesAB = findFatherlessMatches(state.gedcomA, state.gedcomB);
+    const matchesBA = findFatherlessMatches(state.gedcomB, state.gedcomA);
+
+    const allMatches = [
+      ...matchesAB.map(m => ({...m, direction: `A:s träd / B:s man`})),
+      ...matchesBA.map(m => ({...m, direction: `B:s träd / A:s man`}))
+    ];
+
+    if (allMatches.length === 0) {
+      html += `<div class="finding">Inga barn utan fadersuppgift hittades med geografisk-temporal träff.</div>`;
+    } else {
+      for (const m of allMatches) {
+        const birthPlace = m.childPlace ? m.childPlace.split(',')[0] : 'okänd ort';
+        html += `<div class="finding warn">
+          <strong>${escH(m.man)}</strong> befann sig i trakterna kring <strong>${escH(birthPlace)}</strong> när <strong>${escH(m.motherName || m.child)}</strong> bör ha blivit gravid med ${m.child.includes('son') || m.child.includes('Son') ? 'sonen' : 'barnet'} <strong>${escH(m.child)}</strong> (f. ${m.childBorn}).
+          <br><span style="color:var(--muted);font-size:11px">[${escH(m.direction)}]</span>
+        </div>`;
+      }
+    }
+  }
+  html += `</div></div>`;
+
+  // ── SAMMANFATTNING ──
+  html += `<div class="analysis-block" style="border-color:var(--gold)"><h3>📋 Samlad bedömning</h3><div class="analysis-result">`;
+  const parts = [];
+  if (ab_cm) {
+    const est = estimateRelation(ab_cm);
+    parts.push(`Trolig relation ${escH(nameA)} ↔ ${escH(nameB)}: <strong>${est.rel}</strong> (${ab_cm} cM)`);
+  }
+  const morMatches = state.matches.filter(m => m.side === 'mor');
+  const farMatches = state.matches.filter(m => m.side === 'far');
+  if (morMatches.length && farMatches.length) {
+    parts.push(`Träffar finns på <strong>båda sidor</strong> — kontrollera om A och B är på olika sidor eller om klassificeringen är osäker`);
+  } else if (morMatches.length) {
+    parts.push(`${morMatches.length} delade träff(ar) på <strong>mors sida</strong> — gemensam gren troligen via mors anor`);
+  } else if (farMatches.length) {
+    parts.push(`${farMatches.length} delade träff(ar) på <strong>fars sida</strong> — gemensam gren troligen via fars anor`);
+  }
+
+  // A/B role based conclusions
+  var summPA = state.matches.find(function(m){ return m.isPersonA; });
+  var summPB = state.matches.find(function(m){ return m.isPersonB; });
+  if (summPA) parts.push(escH(nameA) + ' identifierad som <strong>' + escH(summPA.name) + '</strong> (' + (summPA.side === 'mor' ? 'mors' : summPA.side === 'far' ? 'fars' : 'okänd') + ' sida)');
+  if (summPB) parts.push(escH(nameB) + ' identifierad som <strong>' + escH(summPB.name) + '</strong> (' + (summPB.side === 'mor' ? 'mors' : summPB.side === 'far' ? 'fars' : 'okänd') + ' sida)');
+
+  if (state.gedcomA && state.gedcomB) {
+    var summGeo = findGeoOverlap(state.gedcomA, state.gedcomB);
+    var allGeoHits = summGeo.strong.concat(summGeo.weak);
+    if (allGeoHits.length) {
+      var byPlace2 = {};
+      allGeoHits.forEach(function(m){ var pl = m.parish || m.place.split(',')[0]; byPlace2[pl] = (byPlace2[pl]||0)+1; });
+      var top = Object.entries(byPlace2).sort(function(a,b){ return b[1]-a[1]; }).slice(0,3).map(function(e){ return e[0]; });
+      parts.push('Geografisk tyngdpunkt: <strong>' + top.join(', ') + '</strong> (' + summGeo.strong.length + ' starka, ' + summGeo.weak.length + ' möjliga träffar)');
+    }
+  }
+
+  // Triangulation summary
+  const overlapMap2 = buildOverlapMap(state.matches);
+  const triPairsSummary = new Set();
+  state.matches.forEach(m => {
+    collectMatchOverlaps(m, overlapMap2).forEach(o => {
+      triPairsSummary.add([m.name, o.other].sort().join('|||'));
+    });
+  });
+  if (triPairsSummary.size) {
+    parts.push(`<strong>${triPairsSummary.size} triangulerade segmentpar</strong> bekräftade — stärker hypotesen om gemensam gren`);
+  }
+
+  const cIssues = state.matches.filter(m => {
+    const cm = m.testers.reduce((s,t)=>s+(t.cm||0),0);
+    return (m.relA && expectedCmForRelation(m.relA) && (cm < expectedCmForRelation(m.relA).min || cm > expectedCmForRelation(m.relA).max)) ||
+           (m.relB && expectedCmForRelation(m.relB) && (cm < expectedCmForRelation(m.relB).min || cm > expectedCmForRelation(m.relB).max));
+  }).length;
+  if (cIssues > 0) parts.push(`<span class="tag tag-red">⚠ ${cIssues} konsistensfel — kontrollera angivna relationer</span>`);
+
+  if (parts.length) {
+    html += parts.map(p => `<div class="finding good">${p}</div>`).join('');
+  } else {
+    html += `<div class="finding warn">Fyll i DNA-värden, ladda GEDCOM-filer och markera A/B bland träffarna för en fullständig bedömning.</div>`;
+  }
+  html += `</div></div>`;
+
+  html += `</div>
+  <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-gold" onclick="App.exportAnalysisHtml()">📄 Exportera rapport (HTML)</button>
+    <button class="btn btn-secondary" onclick="App.exportAnalysisTxt()">📋 Exportera som text</button>
+    <button class="btn btn-primary" onclick="App.printAnalysis()">🖨 Skriv ut / Spara PDF</button>
+  </div>`;
+  document.getElementById('analysisOutput').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════
+function printAnalysis() {
+  // Move print-header inside analysisOutput so it prints on page 1
+  var ph = document.querySelector('.print-header');
+  var ao = document.getElementById('analysisOutput');
+  if (ph && ao && ao.firstChild) {
+    ao.insertBefore(ph, ao.firstChild);
+  }
+  var nameA = document.getElementById('nameA').value || 'Person A';
+  var nameB = document.getElementById('nameB').value || 'Person B';
+  var date  = new Date().toLocaleDateString('sv-SE');
+  var meta  = document.getElementById('printMeta');
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v0.9.37';
+  showTab('analys');
+  // Small delay so tab switch and meta text render before print dialog opens
+  setTimeout(function(){ window.print(); }, 150);
+}
+
+function exportAnalysisHtml() {
+  const nameA = document.getElementById('nameA').value || 'Person A';
+  const nameB = document.getElementById('nameB').value || 'Person B';
+  const content = document.getElementById('analysisOutput').innerHTML;
+  const date = new Date().toLocaleDateString('sv-SE');
+  const css = [
+    'body{font-family:"Segoe UI",sans-serif;max-width:900px;margin:40px auto;padding:20px;background:#f5f5f5;color:#222}',
+    'h1{color:#1a1a2e;border-bottom:3px solid #e94560;padding-bottom:10px}',
+    '.meta{color:#666;font-size:13px;margin-bottom:30px}',
+    '.analysis-block{background:#fff;border:1px solid #ddd;border-radius:8px;padding:18px;margin-bottom:16px}',
+    '.analysis-block h3{font-size:15px;color:#1a1a2e;margin-bottom:12px}',
+    '.finding{padding:8px 12px;border-left:3px solid #c9a84c;margin:6px 0;background:#fffbf0;border-radius:0 5px 5px 0;font-size:13px;line-height:1.6}',
+    '.finding.good{border-left-color:#4caf7d;background:#f0faf5}',
+    '.finding.warn{border-left-color:#f0c040;background:#fffbea}',
+    '.finding.bad{border-left-color:#e94560;background:#fff0f3}',
+    '.tag{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;margin:2px}',
+    '.tag-green{background:#d4f5e4;color:#1a6b3c;border:1px solid #4caf7d}',
+    '.tag-yellow{background:#fff3cd;color:#856404;border:1px solid #f0c040}',
+    '.tag-red{background:#fde8ec;color:#a0122a;border:1px solid #e94560}',
+    '.overlap-alert{background:#fffbf0;border:1px solid #c9a84c;border-radius:5px;padding:8px 12px;font-size:12px;margin:4px 0}',
+    '.card-title{font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:16px}',
+    'footer{margin-top:40px;font-size:11px;color:#999;text-align:center}',
+    'button{display:none}'  // hide buttons in export
+  ].join('\n');
+
+  const html = '<!DOCTYPE html>\n<html lang="sv"><head><meta charset="UTF-8">\n'
+    + '<title>DNA-Analys: ' + escH(nameA) + ' \u2194 ' + escH(nameB) + '</title>\n'
+    + '<style>\n' + css + '\n</style></head><body>\n'
+    + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
+    + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v0.9.37</div>\n'
+    + content + '\n'
+    + '<footer>Genererad av DNA-Match Analyzer v0.9.37 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '</body></html>';
+
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date + '.html').replace(/[\/\\:*?"<>| ]/g,'_');
+  a.click();
+}
+
+function exportAnalysisTxt() {
+  const nameA = document.getElementById('nameA').value || 'Person A';
+  const nameB = document.getElementById('nameB').value || 'Person B';
+  const el = document.getElementById('analysisOutput');
+  // Strip HTML tags for plain text
+  const tmp = document.createElement('div');
+  tmp.innerHTML = el.innerHTML;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v0.9.37\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `DNA-Analys_${nameA}_${nameB}.txt`.replace(/[\/\\:*?"<>| ]/g,'_');
+  a.click();
+}
+function getSessionData() {
+  return {
+    version: state.version,
+    savedAt: new Date().toISOString(),
+    nameA: document.getElementById('nameA').value,
+    nameB: document.getElementById('nameB').value,
+    notesA: document.getElementById('notesA').value,
+    notesB: document.getElementById('notesB').value,
+    dna_ab: {
+      cm: document.getElementById('ab_cm').value,
+      seg: document.getElementById('ab_seg').value,
+      longest: document.getElementById('ab_longest').value,
+      platform: document.getElementById('ab_platform').value,
+      comment: document.getElementById('ab_comment').value
+    },
+    matches: state.matches,
+    motherName: state.motherName,
+    testers: state.testers || []
+  };
+}
+
+function saveSession() {
+  const data = getSessionData();
+  const nameA = data.nameA || 'PersonA';
+  const nameB = data.nameB || 'PersonB';
+  const filename = `${nameA} - ${nameB}.json`.replace(/[\/\\:*?"<>|]/g, '_');
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  updateSessionMeta();
+}
+
+function loadSession(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      document.getElementById('nameA').value = data.nameA || '';
+      document.getElementById('nameB').value = data.nameB || '';
+      document.getElementById('notesA').value = data.notesA || '';
+      document.getElementById('notesB').value = data.notesB || '';
+      if (data.dna_ab) {
+        document.getElementById('ab_cm').value = data.dna_ab.cm || '';
+        document.getElementById('ab_seg').value = data.dna_ab.seg || '';
+        document.getElementById('ab_longest').value = data.dna_ab.longest || '';
+        document.getElementById('ab_platform').value = data.dna_ab.platform || 'MyHeritage';
+        document.getElementById('ab_comment').value = data.dna_ab.comment || '';
+      }
+      state.matches = data.matches || [];
+      if (data.testers) {
+        state.testers = data.testers;
+        renderTesterBranchList();
+      }
+      if (data.motherName) {
+        state.motherName = data.motherName;
+        const inp = document.getElementById('motherNameInput');
+        if (inp) inp.value = data.motherName;
+      }
+      renderMatchList();
+      updateTesterFilterButtons();
+      updateSessionMeta(data);
+      showTab('personer');
+    } catch(err) {
+      alert('Kunde inte läsa sessionsfilen: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function clearSession() {
+  if (!confirm('Rensa all inmatad data — inklusive Person A/B och GEDCOM-filer?')) return;
+
+  // Clear form fields
+  ['nameA','nameB','notesA','notesB','ab_cm','ab_seg','ab_longest','ab_comment'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  var pl = document.getElementById('ab_platform');
+  if (pl) pl.value = 'MyHeritage';
+
+  // Clear GEDCOM state
+  state.gedcomA = null;
+  state.gedcomB = null;
+  state.personA = null;
+  state.personB = null;
+  state.triGedcomAll = [];
+  state.triGedcomPicks = {};
+
+  // Reset GEDCOM status indicators
+  ['A','B'].forEach(function(side) {
+    var statusEl = document.getElementById('gedcomStatus' + side);
+    if (statusEl) statusEl.innerHTML = '<div class="dot dot-grey"></div><span>Ingen fil laddad</span>';
+    var wrapEl = document.getElementById('person' + side + 'SelectWrap');
+    if (wrapEl) wrapEl.style.display = 'none';
+    var searchEl = document.getElementById('person' + side + 'Search');
+    if (searchEl) searchEl.value = '';
+    var selDispEl = document.getElementById('person' + side + 'Selected');
+    if (selDispEl) { selDispEl.textContent = ''; selDispEl.classList.remove('visible'); }
+    var sbEl = document.getElementById('statusGedcom' + side);
+    if (sbEl) sbEl.innerHTML = '📁 GEDCOM ' + side + ': ej laddad';
+    // Clear file input
+    var fileEl = document.getElementById('gedcom' + side);
+    if (fileEl) fileEl.value = '';
+  });
+
+  // Clear matches and testers
+  state.matches = [];
+  state.csvFiles = [];
+  state.testers = [];
+  state.motherName = 'Ulla';
+  state.motherNameSetByUser = false;
+
+  // Reset CSV loaded list
+  var csvList = document.getElementById('csvLoadedList');
+  if (csvList) csvList.innerHTML = '';
+
+  // Reset mother name input
+  var mnInput = document.getElementById('motherNameInput');
+  if (mnInput) mnInput.value = 'Ulla';
+
+  // Clear analysis output
+  document.getElementById('analysisOutput').innerHTML =
+    '<div class="empty"><div class="empty-icon">🔍</div>Klicka på <strong>Kör analys</strong> för att starta.</div>';
+
+  renderMatchList();
+  updateTesterFilterButtons();
+  renderTesterBranchList();
+  updateSessionMeta();
+}
+
+function updateSessionMeta(data) {
+  const nA = document.getElementById('nameA').value || 'Person A';
+  const nB = document.getElementById('nameB').value || 'Person B';
+  const info = document.getElementById('sessionInfo');
+  // Update status bar
+  var sbS = document.getElementById('statusSession');
+  if (sbS) sbS.textContent = data ? ('💾 ' + nA + ' ↔ ' + nB + ' · ' + new Date(data.savedAt).toLocaleDateString('sv-SE')) : ('💾 ' + nA + ' ↔ ' + nB);
+  const matchCount = state.matches ? state.matches.length : 0;
+  if (data) {
+    info.innerHTML = `Laddad session: <strong>${escH(nA)} ↔ ${escH(nB)}</strong><br>Sparad: ${new Date(data.savedAt).toLocaleString('sv-SE')}<br>Gemensamma träffar: ${matchCount} st`;
+  } else {
+    info.textContent = `Aktiv session: ${nA} ↔ ${nB} · ${matchCount} gemensamma träffar`;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════
+function escH(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+
+
+// ═══════════════════════════════════════════════
+// INIT — körs när hela DOM:en är klar
+// ═══════════════════════════════════════════════
+App.showTab              = showTab;
+App.loadGedcom           = loadGedcom;
+App.filterPersonSearch   = filterPersonSearch;
+App.openPersonSearch     = openPersonSearch;
+App.filterTriSearch      = filterTriSearch;
+App.filterTriSearchSide  = filterTriSearchSide;
+App.clearManualForm      = clearManualForm;
+App.openTriSearch        = openTriSearch;
+App.runAnalysis          = runAnalysis;
+App.runAnalysisCore      = runAnalysisCore;
+App.saveSession          = saveSession;
+App.loadSession          = loadSession;
+App.clearSession         = clearSession;
+App.addManualSegmentRow  = addManualSegmentRow;
+App.addManualMatch       = addManualMatch;
+App.handleCsvFiles       = handleCsvFiles;
+App.setTesterFilter      = setTesterFilter;
+App.toggleMatchCard      = toggleMatchCard;
+App.removeMatch          = removeMatch;
+App.toggleRole           = toggleRole;
+App.updateMatchMeta      = updateMatchMeta;
+App.updateMatchAntrade   = updateMatchAntrade;
+App.exportAnalysisHtml   = exportAnalysisHtml;
+App.printAnalysis        = printAnalysis;
+App.exportAnalysisTxt    = exportAnalysisTxt;
+App.selectPersonResult   = selectPersonResult;
+App.selectTriGedcomResult= selectTriGedcomResult;
+App.computeMatchSide     = computeMatchSide;
+App.renderMatchList      = renderMatchList;
+App.updateSessionMeta    = updateSessionMeta;
+App.addTesterBranch      = addTesterBranch;
+App.cleanTesterNames     = cleanTesterNames;
+App.removeTesterBranch   = removeTesterBranch;
+App.renderTesterBranchList = renderTesterBranchList;
+
+// INIT — after all functions and App bindings are defined
+// Script is at end of body — DOM is ready, call directly
+state.triGedcomAll = [];
+state.triGedcomPick = null;
+
+// Bind all functions into App namespace for HTML inline handlers
+
+document.addEventListener('click', function(e) {
+  ['personAList','personBList','triGedcomList'].forEach(function(id) {
+    var list = document.getElementById(id);
+    if (list && list.classList.contains('open')) {
+      var wrap = list.closest('.person-search-wrap');
+      if (wrap && !wrap.contains(e.target)) list.classList.remove('open');
+    }
+  });
+});
+
+renderMatchList();
+updateSessionMeta();
+</script>
+</body>
+</html>
