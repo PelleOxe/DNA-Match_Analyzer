@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v0.9.37</title>
+<title>DNA-Match Analyzer v0.9.41</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -265,7 +265,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v0.9.37</div>
+      <div class="app-version">v0.9.41</div>
     </div>
   </div>
   <div class="header-actions">
@@ -593,7 +593,7 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 0.9.37<br>
+      <strong>Version:</strong> 0.9.41<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
       <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
@@ -618,7 +618,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '0.9.37'
+  version: '0.9.41'
 };
 
 // Global namespace — filled at end of script
@@ -1695,8 +1695,10 @@ function displayParish(s) {
 
 // Barn utan far
 function findFatherlessMatches(gedcomBase, gedcomOther, windowYears = 16) {
-  // gedcomBase has children without father, gedcomOther has men to match
   if (!gedcomBase || !gedcomOther) return [];
+  const MIN_FATHER_AGE = 15;  // man måste vara minst 15 år vid konception
+  const MIN_MOTHER_AGE = 15;  // kvinna minst 15 år vid förlossning
+  const MAX_MOTHER_AGE = 50;  // kvinna max 50 år vid förlossning
   const results = [];
   const childrenNoFather = gedcomBase.persons.filter(p => p.noFather && p.sex !== 'M');
   const men = gedcomOther.persons.filter(p => p.sex === 'M');
@@ -1707,8 +1709,24 @@ function findFatherlessMatches(gedcomBase, gedcomOther, windowYears = 16) {
     const childPlace = normPlace(child.bornPlace || '');
     if (!childPlace) continue;
 
+    // Find mother and check her age
+    const mother = gedcomBase.persons.find(p =>
+      p.id === gedcomBase.families?.[child.motherFamId]?.wife);
+    const motherName = mother ? mother.name : 'okänd moder';
+    if (mother && mother.born) {
+      const motherAgeAtBirth = child.born - mother.born;
+      if (motherAgeAtBirth < MIN_MOTHER_AGE || motherAgeAtBirth > MAX_MOTHER_AGE) continue;
+    }
+
     for (const man of men) {
-      // Does man have any event near conceptionYear in a matching place?
+      // Age check: man must be at least MIN_FATHER_AGE at conception
+      if (man.born) {
+        const manAgeAtConception = conceptionYear - man.born;
+        if (manAgeAtConception < MIN_FATHER_AGE) continue;
+        // Also skip if man is born after the child (impossible)
+        if (man.born > child.born) continue;
+      }
+
       const allEvents = [
         { year: man.born, place: man.bornPlace },
         { year: man.died, place: man.diedPlace },
@@ -1720,17 +1738,18 @@ function findFatherlessMatches(gedcomBase, gedcomOther, windowYears = 16) {
         const evPlace = normPlace(ev.place);
         if (!evPlace) continue;
         if (evPlace === childPlace || evPlace.includes(childPlace) || childPlace.includes(evPlace)) {
-          // Find mother
-          const mother = gedcomBase.persons.find(p => p.id === gedcomBase.families?.[child.motherFamId]?.wife);
-          const motherName = mother ? mother.name : 'okänd moder';
+          const manAgeAtConception = man.born ? conceptionYear - man.born : null;
           results.push({
             child: child.name,
             childBorn: child.born,
             childPlace: child.bornPlace,
             man: man.name,
+            manBorn: man.born,
+            manAgeAtConception,
             manEvent: ev,
             conceptionYear,
-            motherName
+            motherName,
+            motherBorn: mother ? mother.born : null
           });
           break;
         }
@@ -2242,8 +2261,16 @@ function runAnalysisCore() {
     } else {
       for (const m of allMatches) {
         const birthPlace = m.childPlace ? m.childPlace.split(',')[0] : 'okänd ort';
+        const manAge = m.manAgeAtConception ? ` (${m.manAgeAtConception} år vid konception)` : '';
+        const manBornStr = m.manBorn ? ` f. ${m.manBorn}` : '';
+        const motherAgeAtBirth = (m.motherBorn && m.childBorn) ? m.childBorn - m.motherBorn : null;
+        const motherBornStr = m.motherBorn ? ` f. ${m.motherBorn}` : '';
+        const motherAgeStr = motherAgeAtBirth ? ` (${motherAgeAtBirth} år vid förlossningen)` : '';
+        const childGender = m.child.match(/son|Son|pojke/i) ? 'sonen' : 'barnet';
         html += `<div class="finding warn">
-          <strong>${escH(m.man)}</strong> befann sig i trakterna kring <strong>${escH(birthPlace)}</strong> när <strong>${escH(m.motherName || m.child)}</strong> bör ha blivit gravid med ${m.child.includes('son') || m.child.includes('Son') ? 'sonen' : 'barnet'} <strong>${escH(m.child)}</strong> (f. ${m.childBorn}).
+          <strong>${escH(m.man)}${manBornStr}</strong>${manAge} befann sig i trakterna kring <strong>${escH(birthPlace)}</strong>
+          när <strong>${escH(m.motherName || m.child)}${motherBornStr}</strong>${motherAgeStr} bör ha blivit gravid
+          med ${childGender} <strong>${escH(m.child)}</strong> (f. ${m.childBorn}).
           <br><span style="color:var(--muted);font-size:11px">[${escH(m.direction)}]</span>
         </div>`;
       }
@@ -2251,7 +2278,206 @@ function runAnalysisCore() {
   }
   html += `</div></div>`;
 
+  // ── 6. HYPOTES OCH LETANDETIPS ──
+  html += `<div class="analysis-block" style="border-color:var(--accent2)"><h3>🔭 6. Hypotes — var letar man vidare?</h3><div class="analysis-result">
+    <div class="finding" style="font-size:11px;color:var(--muted);border-left-color:var(--muted);background:transparent;padding:4px 8px;margin-bottom:8px">
+      Baseras på gemensamma anor ur anträdena, triangulerade segment, cM-värden och grenananalys.
+    </div>`;
+
+  // ── 6a. Extract common ancestors from antrade fields
+  var ancestorCount = {};  // "Namn År" -> count
+  var ancestorPairs = {};  // "Namn1/Namn2" -> {names, years, count, matches:[]}
+  var matchesWithAntrade = state.matches.filter(function(m){ return m.antrade && m.antrade.trim(); });
+
+  matchesWithAntrade.forEach(function(m) {
+    // Extract bracketed common ancestors [NAME YEAR–YEAR]
+    var brackets = m.antrade.match(/\[([^\]]+)\]/g) || [];
+    brackets.forEach(function(b) {
+      var text = b.slice(1,-1).trim();
+      var key = text.toLowerCase().replace(/\s+/g,' ');
+      if (!ancestorCount[key]) ancestorCount[key] = { text: text, count: 0, matches: [] };
+      ancestorCount[key].count++;
+      ancestorCount[key].matches.push(m.name);
+    });
+    // Also find paired ancestors [A]/[B] or [A/B]
+    var pairMatch = m.antrade.match(/\[([^\]]+)\]\/\[([^\]]+)\]/g) || [];
+    pairMatch.forEach(function(p) {
+      var parts = p.match(/\[([^\]]+)\]/g).map(function(x){ return x.slice(1,-1).trim(); });
+      if (parts.length === 2) {
+        var pairKey = parts.map(function(x){ return x.toLowerCase(); }).sort().join('|||');
+        if (!ancestorPairs[pairKey]) ancestorPairs[pairKey] = { names: parts, count: 0, matches: [] };
+        ancestorPairs[pairKey].count++;
+        ancestorPairs[pairKey].matches.push(m.name);
+      }
+    });
+  });
+
+  // ── 6b. Estimate birth year of unknown common ancestor from cM
+  var ab_cm_val = parseFloat(document.getElementById('ab_cm').value) || null;
+  var estGen = null, estBirthRange = null;
+  if (ab_cm_val) {
+    // Rough generation depth from cM
+    if (ab_cm_val >= 575) estGen = 2;
+    else if (ab_cm_val >= 200) estGen = 3;
+    else if (ab_cm_val >= 100) estGen = 4;
+    else if (ab_cm_val >= 40)  estGen = 5;
+    else if (ab_cm_val >= 10)  estGen = 6;
+    else estGen = 7;
+
+    // Estimate birth year: work back from A's estimated birth
+    var personABorn = state.personA ? (state.personA.born || null) : null;
+    if (!personABorn) {
+      // Try to find from name field
+      var nameAField = document.getElementById('nameA').value;
+      var yearMatch = nameAField.match(/\b(1[89]\d{2}|20[012]\d)\b/);
+      if (yearMatch) personABorn = parseInt(yearMatch[1]);
+    }
+    if (personABorn) {
+      var avgGenLen = 28; // average generation length in years
+      var ancestorMidYear = personABorn - (estGen * avgGenLen);
+      estBirthRange = (ancestorMidYear - 15) + '–' + (ancestorMidYear + 15);
+    }
+  }
+
+  // ── 6c. Best branch from branch analysis
+  var topBranchName = null, topBranchPct = 0;
+  if (state.gedcomA && state.personA) {
+    var bA = getBranches(state.gedcomA, state.personA.id);
+    if (bA) {
+      var sA = scoreBranches(bA, state.gedcomB || state.gedcomA, state.matches, state.motherName);
+      if (sA) {
+        var BLABELS = {farfar:'Farfars sida',farmor:'Farmors sida',morfar:'Morfars sida',mormor:'Mormors sida'};
+        Object.entries(sA).forEach(function(e){
+          if (e[1].pct > topBranchPct) { topBranchPct = e[1].pct; topBranchName = BLABELS[e[0]] || e[0]; }
+        });
+      }
+    }
+  }
+
+  // ── 6d. Best geo places
+  var topPlaces = [];
+  if (state.gedcomA && state.gedcomB) {
+    var geoR = findGeoOverlap(state.gedcomA, state.gedcomB);
+    var placeCounts = {};
+    geoR.strong.concat(geoR.weak).forEach(function(h){
+      var pl = h.parish || h.place.split(',')[0];
+      placeCounts[pl] = (placeCounts[pl]||0) + (geoR.strong.includes(h) ? 2 : 1);
+    });
+    topPlaces = Object.entries(placeCounts).sort(function(a,b){return b[1]-a[1];}).slice(0,3).map(function(e){return e[0];});
+  }
+
+  // ── 6e. Triangulated groups
+  var triGroups = [];
+  var overlapM = buildOverlapMap(state.matches);
+  var triSeen = new Set();
+  state.matches.forEach(function(m) {
+    collectMatchOverlaps(m, overlapM).forEach(function(o) {
+      var pairKey = [m.name, o.other].sort().join('|||');
+      if (!triSeen.has(pairKey)) {
+        triSeen.add(pairKey);
+        triGroups.push({ a: m.name, b: o.other, chr: o.chr,
+          startMb: (o.overlapStart/1e6).toFixed(1), endMb: (o.overlapEnd/1e6).toFixed(1),
+          cm: o.overlapCm ? o.overlapCm.toFixed(1) : null });
+      }
+    });
+  });
+
+  // ── 6f. Build hypothesis text
+  var hasContent = false;
+
+  // Common ancestors section
+  var sortedAncestors = Object.values(ancestorCount).sort(function(a,b){return b.count-a.count;});
+  if (sortedAncestors.length) {
+    hasContent = true;
+    html += `<div style="font-size:12px;font-weight:700;color:var(--gold);margin:8px 0 5px">📜 Gemensamma anor som pekar ut sig</div>`;
+    sortedAncestors.forEach(function(a) {
+      var strength = a.count >= 3 ? 'good' : a.count >= 2 ? 'warn' : '';
+      html += `<div class="finding ${strength}">
+        <strong>${escH(a.text)}</strong>
+        <span style="color:var(--muted);font-size:11px"> — nämnd i ${a.count} anträde${a.count>1?'n':''}</span>
+        ${a.count > 1 ? '<span class="tag tag-green">Stark signal</span>' : ''}
+        <br><span style="font-size:11px;color:var(--muted)">${escH(a.matches.join(', '))}</span>
+      </div>`;
+    });
+  }
+
+  // Ancestor pairs
+  var sortedPairs = Object.values(ancestorPairs).sort(function(a,b){return b.count-a.count;});
+  if (sortedPairs.length) {
+    hasContent = true;
+    html += `<div style="font-size:12px;font-weight:700;color:var(--gold);margin:10px 0 5px">👫 Gemensamma anpar</div>`;
+    sortedPairs.forEach(function(p) {
+      html += `<div class="finding ${p.count>=2?'good':''}">
+        <strong>${escH(p.names[0])}</strong> &amp; <strong>${escH(p.names[1])}</strong>
+        <span style="color:var(--muted);font-size:11px"> — bekräftat i ${p.count} anträde${p.count>1?'n':''}</span>
+        ${p.count>=2?'<span class="tag tag-green">Bekräftat par</span>':''}
+        <br><span style="font-size:11px;color:var(--muted)">${escH(p.matches.join(', '))}</span>
+      </div>`;
+    });
+  }
+
+  // Generation estimate
+  if (estGen) {
+    hasContent = true;
+    html += `<div style="font-size:12px;font-weight:700;color:var(--gold);margin:10px 0 5px">📅 Estimerad generation och födelsetid</div>`;
+    html += `<div class="finding">
+      Baserat på ${ab_cm_val} cM är den gemensamma anfadern troligen i <strong>generation ${estGen}</strong> räknat från dig
+      (${estGen===2?'2-männing/kusin':estGen===3?'syssling/3-männing':estGen===4?'brylling/4-männing':estGen+'e led'}).
+      ${estBirthRange ? 'Estimerad födelsetid för den gemensamma anfadern: <strong>ca ' + estBirthRange + '</strong>.' : ''}
+      <br><span style="font-size:11px;color:var(--muted)">Räknat med ~28 år per generation bakåt.</span>
+    </div>`;
+  }
+
+  // Triangulation insight
+  if (triGroups.length) {
+    hasContent = true;
+    html += `<div style="font-size:12px;font-weight:700;color:var(--gold);margin:10px 0 5px">🔺 Triangulerade grupper — gemensam gren bekräftad</div>`;
+    // Group by chromosome
+    var byChr = {};
+    triGroups.forEach(function(g){
+      if (!byChr[g.chr]) byChr[g.chr] = [];
+      byChr[g.chr].push(g);
+    });
+    Object.entries(byChr).forEach(function(e) {
+      var chr = e[0], pairs = e[1];
+      var names = [...new Set(pairs.flatMap(function(p){return [p.a,p.b];}))];
+      html += `<div class="finding good">
+        <strong>Kromosom ${escH(String(chr))}</strong> — ${escH(names.slice(0,4).join(', '))}${names.length>4?' m.fl.':''}
+        <span style="color:var(--muted);font-size:11px"> delar segment i denna region — stark indikation på gemensam gren</span>
+      </div>`;
+    });
+  }
+
+  // Main hypothesis
+  html += `<div style="font-size:12px;font-weight:700;color:var(--gold);margin:10px 0 5px">💡 Sammantagen hypotes</div>`;
+  var hypo = [];
+  if (topBranchName && topBranchPct > 30) hypo.push('Grenananalysen pekar mot <strong>' + escH(topBranchName) + '</strong> (' + topBranchPct + '%)');
+  if (sortedAncestors.length) {
+    var top1 = sortedAncestors[0];
+    hypo.push('Den gemensamma anfadern är troligen ett barn till eller nära släkting med <strong>' + escH(top1.text) + '</strong>');
+  }
+  if (topPlaces.length) hypo.push('Geografisk tyngdpunkt: <strong>' + escH(topPlaces.join(', ')) + '</strong>');
+  if (estBirthRange) hypo.push('Sök person född ca <strong>' + estBirthRange + '</strong> i dessa trakter');
+  if (triGroups.length) {
+    var chrList = [...new Set(triGroups.map(function(g){return g.chr;}))].join(', ');
+    hypo.push('Triangulering på kromosom ' + escH(String(chrList)) + ' bekräftar att flera träffar delar samma gren');
+  }
+
+  if (hypo.length) {
+    html += `<div class="finding good" style="border-left-color:var(--accent2);background:rgba(168,197,218,0.08);line-height:1.8">
+      ${hypo.map(function(h){return '→ ' + h;}).join('<br>')}
+    </div>`;
+    hasContent = true;
+  }
+
+  if (!hasContent) {
+    html += `<div class="finding warn">Fyll i anträden på matchkorten, ladda GEDCOM-filer och kör grenananalysen för en fullständig hypotes.</div>`;
+  }
+
+  html += `</div></div>`;
+
   // ── SAMMANFATTNING ──
+
   html += `<div class="analysis-block" style="border-color:var(--gold)"><h3>📋 Samlad bedömning</h3><div class="analysis-result">`;
   const parts = [];
   if (ab_cm) {
@@ -2334,7 +2560,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v0.9.37';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v0.9.41';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -2370,15 +2596,18 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v0.9.37</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v0.9.41</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v0.9.37 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v0.9.41 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
+  const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
+  const chosenHtml = prompt('Exportera rapport som:', suggestedHtml);
+  if (chosenHtml === null) return;
   const blob = new Blob([html], {type:'text/html;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date + '.html').replace(/[\/\\:*?"<>| ]/g,'_');
+  a.download = (chosenHtml.trim() || suggestedHtml) + '.html';
   a.click();
 }
 
@@ -2389,11 +2618,14 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v0.9.37\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v0.9.41\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
+  const chosenTxt = prompt('Exportera som text:', suggestedTxt);
+  if (chosenTxt === null) return;
   const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `DNA-Analys_${nameA}_${nameB}.txt`.replace(/[\/\\:*?"<>| ]/g,'_');
+  a.download = (chosenTxt.trim() || suggestedTxt) + '.txt';
   a.click();
 }
 function getSessionData() {
