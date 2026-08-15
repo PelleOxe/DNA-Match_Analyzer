@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v0.9.41</title>
+<title>DNA-Match Analyzer v0.9.43</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -265,7 +265,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v0.9.41</div>
+      <div class="app-version">v0.9.43</div>
     </div>
   </div>
   <div class="header-actions">
@@ -400,19 +400,25 @@
     <div class="hint" style="margin-bottom:12px">En fil per testperson (Per, Carina, Ulla osv). Klicka på knappen nedan för att välja fil — drag-och-släpp fungerar inte alltid i alla webbläsare.</div>
 
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <button class="btn btn-green" onclick="document.getElementById('csvFileInput').click()">📄 Välj CSV-fil(er)…</button>
+      <button class="btn btn-green" onclick="document.getElementById('csvFileInput').click()">📄 MyHeritage CSV…</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('ftdnaFileInput').click()">📄 FamilyTreeDNA Matches…</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('ftdnaChrFileInput').click()">🧬 FTDNA Kromosom Browser…</button>
       <span style="font-size:12px;color:var(--muted)">eller dra filer hit:</span>
     </div>
 
     <div class="csv-drop-zone" id="csvDropZone"
       ondragover="event.preventDefault();event.stopPropagation();this.classList.add('dragover')"
       ondragleave="event.stopPropagation();this.classList.remove('dragover')"
-      ondrop="event.preventDefault();event.stopPropagation();this.classList.remove('dragover');App.handleCsvFiles(event.dataTransfer.files)"
+      ondrop="event.preventDefault();event.stopPropagation();this.classList.remove('dragover');App.handleDroppedFiles(event.dataTransfer.files)"
       onclick="document.getElementById('csvFileInput').click()">
-      ↑ Drag-och-släpp CSV-filer här
+      ↑ Drag-och-släpp CSV-filer här (MyHeritage eller FamilyTreeDNA)
     </div>
     <input type="file" id="csvFileInput" accept=".csv,.txt" multiple style="display:none"
       onchange="App.handleCsvFiles(this.files);this.value=''">
+    <input type="file" id="ftdnaFileInput" accept=".csv,.txt" multiple style="display:none"
+      onchange="App.handleFtdnaFiles(this.files);this.value=''">
+    <input type="file" id="ftdnaChrFileInput" accept=".csv,.txt" multiple style="display:none"
+      onchange="App.handleFtdnaChrFiles(this.files);this.value=''">
     <div id="csvLoadedList" class="csv-loaded-list"></div>
   </div>
 
@@ -593,9 +599,9 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 0.9.41<br>
+      <strong>Version:</strong> 0.9.43<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
-      <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · Sparning som JSON<br><br>
+      <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · FamilyTreeDNA CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
       Geografisk analys matchar orter textuellt med ±20 år tidsöverlapp. Kyrkogårdar exkluderas.
     </div>
@@ -618,7 +624,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '0.9.41'
+  version: '0.9.43'
 };
 
 // Global namespace — filled at end of script
@@ -1137,6 +1143,283 @@ function computeMatchSide(match) {
   }
   // No Ulla CSV loaded at all → unknown
   match.side = null;
+}
+
+
+// ═══════════════════════════════════════════════
+// FAMILYTREEDNA CSV PARSER
+// ═══════════════════════════════════════════════
+
+function handleDroppedFiles(files) {
+  // Auto-detect format from header
+  Array.from(files).forEach(function(file) {
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var text = ev.target.result.replace(/^\uFEFF/, '');
+      var firstLine = text.split(/\r?\n/)[0].toLowerCase();
+      if (firstLine.includes('matching bucket') || firstLine.includes('longest block')) {
+        var result = parseFtdnaCsv(text, file.name);
+        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+      } else if (firstLine.includes('match name') && firstLine.includes('chromosome') && !firstLine.includes('name,match name')) {
+        // FTDNA Chromosome Browser format
+        var result = parseFtdnaChromosomeCsv(text, file.name);
+        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+      } else {
+        var result = parseMyHeritageCsv(text, file.name);
+        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+function handleFtdnaFiles(files) {
+  Array.from(files).forEach(function(file) {
+    var statusEl = document.getElementById('csvLoadedList');
+    statusEl.innerHTML += '<div style="margin-top:6px;color:var(--muted)">⏳ Läser <strong>' + escH(file.name) + '</strong>…</div>';
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var result = parseFtdnaCsv(ev.target.result, file.name);
+      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+    };
+    reader.onerror = function() { updateCsvLoadedList(file.name, 0, 0, 'Kunde inte läsa filen'); };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+function parseFtdnaCsv(text, filename) {
+  text = text.replace(/^\uFEFF/, '');
+  // FTDNA uses quoted multiline fields — need robust CSV parse
+  var rows = parseCsvFull(text);
+  if (rows.length < 2) return { matchCount: 0, segCount: 0, error: 'Tom fil' };
+
+  var header = rows[0].map(function(h){ return h.trim().toLowerCase(); });
+  var findCol = function() {
+    var candidates = Array.prototype.slice.call(arguments);
+    for (var i=0; i<candidates.length; i++) {
+      var idx = header.findIndex(function(h){ return h.includes(candidates[i]); });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  var iName     = findCol('full name');
+  var iFirst    = findCol('first name');
+  var iLast     = findCol('last name');
+  var iCm       = findCol('shared dna');
+  var iLongest  = findCol('longest block');
+  var iBucket   = findCol('matching bucket');
+  var iSurnames = findCol('ancestral surnames');
+  var iNotes    = findCol('notes');
+  var iRelRange = findCol('relationship range');
+  var iLinked   = findCol('linked relationship');
+  var iXmatch   = findCol('x-match');
+
+  console.log('FTDNA header cols:', header);
+  console.log('Key indices — name:', iName, 'cm:', iCm, 'bucket:', iBucket, 'notes:', iNotes);
+
+  if (iCm === -1) return { matchCount: 0, segCount: 0, error: 'Kolumnen "Shared DNA" hittades inte. Kontrollera att det är en FamilyTreeDNA Family Finder-export.' };
+
+  var added = 0;
+  var testerName = 'FTDNA'; // FTDNA files don't have a tester name column
+
+  for (var i = 1; i < rows.length; i++) {
+    var row = rows[i];
+    if (!row || row.length < 3) continue;
+
+    var fullName = iName >= 0 ? row[iName].trim() : '';
+    if (!fullName && iFirst >= 0 && iLast >= 0) {
+      fullName = (row[iFirst].trim() + ' ' + row[iLast].trim()).trim();
+    }
+    if (!fullName) continue;
+
+    // Clean up name: remove titles (Mr., Mrs., Dr., M.D. etc)
+    fullName = fullName.replace(/^(Mr\.?|Mrs\.?|Ms\.?|Dr\.?|Prof\.?)\s+/i, '').trim();
+    fullName = fullName.replace(/\s+(M\.D\.|Ph\.D\.|Jr\.?|Sr\.?)$/i, '').trim();
+
+    var cm       = parseFloat((row[iCm]||'').replace(',','.')) || null;
+    var longest  = parseFloat((row[iLongest]||'').replace(',','.')) || null;
+    var bucket   = iBucket >= 0 ? row[iBucket].trim() : '';
+    var surnames = iSurnames >= 0 ? row[iSurnames].trim() : '';
+    var notes    = iNotes >= 0 ? row[iNotes].trim() : '';
+    var relRange = iRelRange >= 0 ? row[iRelRange].trim() : '';
+    var linked   = iLinked >= 0 ? row[iLinked].trim() : '';
+    var xmatch   = iXmatch >= 0 ? row[iXmatch].trim() : '';
+
+    if (!cm) continue;
+
+    // Build segments array — FTDNA only has total+longest, no positions
+    var segments = cm ? [{ chr: '?', cm: cm, start: null, end: null, snps: null, longest: longest }] : [];
+
+    addOrMergeMatchBatch(fullName, testerName, cm, segments);
+
+    // Set side from Matching Bucket
+    var match = state.matches.find(function(m){ return m.name.toLowerCase() === fullName.toLowerCase(); });
+    if (match) {
+      // Matching Bucket (Maternal/Paternal) is unreliable — not used for side classification
+      // Side determined by triangulation and tester configuration instead
+
+      // Build antrade from notes + surnames
+      var antradeLines = [];
+      if (notes) antradeLines.push(notes);
+      if (surnames) antradeLines.push('Anföräldrasläktnamn: ' + surnames);
+      if (xmatch && xmatch !== 'No Match') antradeLines.push('X-match: ' + xmatch);
+      if (relRange) match.relA = relRange; // use as relation hint
+      if (linked) antradeLines.push('Angiven relation: ' + linked);
+      if (antradeLines.length && !match.antrade) {
+        match.antrade = antradeLines.join('\n');
+      }
+      added++;
+    }
+  }
+
+  renderMatchList();
+  updateTesterFilterButtons();
+
+  if (!state.csvFiles) state.csvFiles = [];
+  state.csvFiles.push({ filename: filename, matchCount: added, segCount: added, format: 'FamilyTreeDNA' });
+
+  return { matchCount: added, segCount: added, error: null };
+}
+
+// Full CSV parser that handles multiline quoted fields
+function parseCsvFull(text) {
+  var rows = [];
+  var cur = [];
+  var field = '';
+  var inQuote = false;
+  var i = 0;
+  while (i < text.length) {
+    var c = text[i];
+    if (inQuote) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i += 2; continue; } // escaped quote
+        inQuote = false;
+      } else {
+        field += c;
+      }
+    } else {
+      if (c === '"') { inQuote = true; }
+      else if (c === ',') { cur.push(field); field = ''; }
+      else if (c === '\r') { /* skip */ }
+      else if (c === '\n') { cur.push(field); field = ''; rows.push(cur); cur = []; }
+      else { field += c; }
+    }
+    i++;
+  }
+  if (field || cur.length) { cur.push(field); rows.push(cur); }
+  return rows.filter(function(r){ return r.some(function(f){ return f.trim(); }); });
+}
+
+
+// ── FTDNA CHROMOSOME BROWSER PARSER ──
+function handleFtdnaChrFiles(files) {
+  Array.from(files).forEach(function(file) {
+    var statusEl = document.getElementById('csvLoadedList');
+    statusEl.innerHTML += '<div style="margin-top:6px;color:var(--muted)">⏳ Läser kromosom-data: <strong>' + escH(file.name) + '</strong>…</div>';
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var result = parseFtdnaChromosomeCsv(ev.target.result, file.name);
+      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+    };
+    reader.onerror = function() { updateCsvLoadedList(file.name, 0, 0, 'Kunde inte läsa filen'); };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+function parseFtdnaChromosomeCsv(text, filename) {
+  text = text.replace(/^\uFEFF/, '');
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+  if (lines.length < 2) return { matchCount: 0, segCount: 0, error: 'Tom fil' };
+
+  // Parse header — same format as MyHeritage chromosome browser
+  var header = splitCsvLine(lines[0]).map(function(h){ return h.trim().toLowerCase(); });
+  var findCol = function() {
+    var cands = Array.prototype.slice.call(arguments);
+    for (var i=0; i<cands.length; i++) {
+      var idx = header.findIndex(function(h){ return h.includes(cands[i]); });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  var iName  = findCol('match name', 'name');
+  var iChr   = findCol('chromosome', 'chr');
+  var iStart = findCol('start location', 'start');
+  var iEnd   = findCol('end location', 'end');
+  var iCm    = findCol('centimorgan', 'cm');
+  var iSnps  = findCol('snp');
+
+  console.log('FTDNA Chr header:', header);
+  if (iName === -1 || iChr === -1) return { matchCount: 0, segCount: 0, error: 'Ogiltigt format — förväntade kolumnerna Match Name, Chromosome, Start Location, End Location.' };
+
+  var grouped = {};
+  var segCount = 0;
+
+  for (var i = 1; i < lines.length; i++) {
+    var row = splitCsvLine(lines[i]);
+    var matchName = iName >= 0 ? row[iName].trim() : '';
+    var chr   = iChr   >= 0 ? row[iChr].trim()   : '';
+    var cm    = parseFloat((iCm    >= 0 ? row[iCm]    : '').replace(',','.')) || null;
+    var start = parseInt( (iStart >= 0 ? row[iStart] : '').replace(/\s/g,'')) || null;
+    var end   = parseInt( (iEnd   >= 0 ? row[iEnd]   : '').replace(/\s/g,'')) || null;
+    var snps  = parseInt( (iSnps  >= 0 ? row[iSnps]  : '').replace(/\s/g,'')) || null;
+
+    if (!matchName || !chr) continue;
+
+    // Clean name same way as FTDNA match parser
+    matchName = matchName.replace(/^(Mr\.?|Mrs\.?|Ms\.?|Dr\.?|Prof\.?)\s+/i,'').trim();
+    matchName = matchName.replace(/\s+(M\.D\.|Ph\.D\.|Jr\.?|Sr\.?)$/i,'').trim();
+
+    if (!grouped[matchName]) grouped[matchName] = [];
+    grouped[matchName].push({ chr: chr, cm: cm, start: start, end: end, snps: snps });
+    segCount++;
+  }
+
+  var matchCount = Object.keys(grouped).length;
+  if (!matchCount) return { matchCount: 0, segCount: 0, error: 'Inga matchrader hittades.' };
+
+  // Merge segments into existing matches, or create new ones
+  Object.entries(grouped).forEach(function(entry) {
+    var name = entry[0], segs = entry[1];
+    // Try to find existing match (fuzzy — same first+last name)
+    var existing = state.matches.find(function(m){
+      return m.name.toLowerCase() === name.toLowerCase() ||
+             normalizeName(m.name) === normalizeName(name);
+    });
+    if (existing) {
+      // Add segments to existing tester or create FTDNA tester
+      var tester = existing.testers.find(function(t){ return t.name === 'FTDNA'; });
+      if (!tester) {
+        tester = { name: 'FTDNA', cm: segs.reduce(function(s,sg){ return s+(sg.cm||0); },0), segments: [] };
+        existing.testers.push(tester);
+      }
+      // Replace FTDNA segments (re-import)
+      tester.segments = segs;
+      tester.cm = segs.reduce(function(s,sg){ return s+(sg.cm||0); }, 0);
+    } else {
+      // New match from chromosome browser only
+      var totalCm = segs.reduce(function(s,sg){ return s+(sg.cm||0); }, 0);
+      addOrMergeMatchBatch(name, 'FTDNA', totalCm, segs);
+    }
+  });
+
+  state.matches.forEach(function(m){ computeMatchSide(m); });
+  renderMatchList();
+  updateTesterFilterButtons();
+
+  if (!state.csvFiles) state.csvFiles = [];
+  state.csvFiles.push({ filename: filename, matchCount: matchCount, segCount: segCount, format: 'FTDNA-Kromosom' });
+
+  return { matchCount: matchCount, segCount: segCount, error: null };
+}
+
+// Normalize name for fuzzy matching (remove titles, extra spaces)
+function normalizeName(n) {
+  return (n||'').toLowerCase()
+    .replace(/^(mr\.?|mrs\.?|ms\.?|dr\.?|prof\.?)\s+/i,'')
+    .replace(/\s+(m\.d\.|ph\.d\.|jr\.?|sr\.?)$/i,'')
+    .replace(/\s+/g,' ').trim();
 }
 
 // ── CSV IMPORT ──
@@ -2560,7 +2843,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v0.9.41';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v0.9.43';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -2596,9 +2879,9 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v0.9.41</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v0.9.43</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v0.9.41 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v0.9.43 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
   const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
@@ -2618,7 +2901,7 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v0.9.41\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v0.9.43\n${'='.repeat(50)}\n\n` + tmp.innerText;
   const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
   const chosenTxt = prompt('Exportera som text:', suggestedTxt);
   if (chosenTxt === null) return;
@@ -2807,6 +3090,9 @@ App.clearSession         = clearSession;
 App.addManualSegmentRow  = addManualSegmentRow;
 App.addManualMatch       = addManualMatch;
 App.handleCsvFiles       = handleCsvFiles;
+App.handleFtdnaFiles     = handleFtdnaFiles;
+App.handleFtdnaChrFiles  = handleFtdnaChrFiles;
+App.handleDroppedFiles   = handleDroppedFiles;
 App.setTesterFilter      = setTesterFilter;
 App.toggleMatchCard      = toggleMatchCard;
 App.removeMatch          = removeMatch;
