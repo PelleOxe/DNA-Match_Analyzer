@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v0.9.43</title>
+<title>DNA-Match Analyzer v1.0.08</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -78,6 +78,119 @@
   }
   input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent2); }
   input[type="file"] { padding: 6px; cursor: pointer; }
+
+  /* AI-CHATT */
+  #chat-messages {
+    height: 420px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scroll-behavior: smooth;
+  }
+  .chat-msg {
+    max-width: 88%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .chat-msg.user {
+    align-self: flex-end;
+    background: var(--bg3);
+    color: var(--text);
+    border-bottom-right-radius: 3px;
+  }
+  .chat-msg.assistant {
+    align-self: flex-start;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-bottom-left-radius: 3px;
+  }
+  .chat-msg.assistant strong { color: var(--accent2); }
+  .chat-msg.system-note {
+    align-self: center;
+    color: var(--muted);
+    font-size: 11px;
+    font-style: italic;
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+  }
+  .chat-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  #chat-input {
+    flex: 1;
+    resize: vertical;
+    min-height: 44px;
+    max-height: 140px;
+    font-size: 13px;
+  }
+  .chat-send-btn {
+    align-self: flex-end;
+    padding: 10px 18px;
+    white-space: nowrap;
+  }
+  .chat-context-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(168,197,218,0.1);
+    border: 1px solid var(--accent2);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: var(--accent2);
+    margin-bottom: 10px;
+  }
+  .chat-api-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .chat-api-row label { margin: 0; white-space: nowrap; }
+  #chat-api-key {
+    flex: 1;
+    font-family: monospace;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+  }
+  .chat-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .chat-suggestion {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--accent2);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .chat-suggestion:hover { background: rgba(168,197,218,0.15); }
+  .chat-typing {
+    align-self: flex-start;
+    color: var(--muted);
+    font-size: 12px;
+    font-style: italic;
+    padding: 6px 0;
+  }
   .field { margin-bottom: 12px; }
   .hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
@@ -265,7 +378,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v0.9.43</div>
+      <div class="app-version">v1.0.08</div>
     </div>
   </div>
   <div class="header-actions">
@@ -288,6 +401,7 @@
   <div class="tab" onclick="App.showTab('triangulering')">🧩 Gemensamma DNA-träffar</div>
   <div class="tab" onclick="App.showTab('analys')">🔍 Analys</div>
   <div class="tab" onclick="App.showTab('session')">💾 Session</div>
+  <div class="tab" onclick="App.showTab('chatt')">🤖 AI-chatt</div>
 </div>
 
 <main>
@@ -567,7 +681,7 @@
     <div class="card-title">🧬 Testpersoner och kända grenar</div>
     <div class="hint" style="margin-bottom:12px">Ange dina testpersoner och vilken gren de tillhör — används i grenananalysen för att väga DNA-träffar rätt.</div>
     <div id="testerBranchList"><div style="color:var(--muted);font-size:12px">Inga testpersoner tillagda ännu.</div></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-top:12px;align-items:end;flex-wrap:wrap">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;margin-top:12px;align-items:end;flex-wrap:wrap">
       <div class="field" style="margin:0">
         <label>Förnamn</label>
         <input type="text" id="newTesterName" placeholder="t.ex. Per, Carina, Ulla">
@@ -589,6 +703,10 @@
         </select>
       </div>
       <div class="field" style="margin:0">
+        <label>cM mot B (valfritt)</label>
+        <input type="number" id="newTesterCmB" placeholder="t.ex. 87" min="0" step="0.1">
+      </div>
+      <div class="field" style="margin:0">
         <label>Anteckning</label>
         <input type="text" id="newTesterNote" placeholder="valfritt">
       </div>
@@ -599,13 +717,80 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 0.9.43<br>
+      <strong>Version:</strong> 1.0.08<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
       <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · FamilyTreeDNA CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
       Geografisk analys matchar orter textuellt med ±20 år tidsöverlapp. Kyrkogårdar exkluderas.
     </div>
   </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ PANEL: CHATT -->
+<div class="panel" id="panel-chatt">
+
+  <div class="card">
+    <div class="card-title">🤖 AI-genealogi-assistent</div>
+
+    <!-- Leverantörsväljare -->
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <label style="align-self:center;white-space:nowrap">AI-leverantör</label>
+      <select id="chat-provider-select" onchange="App.chatSetProvider(this.value)"
+        style="max-width:220px;font-weight:600">
+        <option value="anthropic">Anthropic (Claude) — betald</option>
+        <option value="gemini" selected>Google Gemini — gratis</option>
+        <option value="groq">Groq / Llama — gratis</option>
+      </select>
+    </div>
+    <div id="chat-provider-info" style="font-size:11px;color:var(--muted);margin-bottom:10px">
+      🟢 Gratis upp till 15 förfrågningar/minut ·
+      <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent2)">aistudio.google.com → Get API Key</a>
+    </div>
+
+    <!-- API-nyckel -->
+    <div class="chat-api-row">
+      <label for="chat-api-key">API-nyckel</label>
+      <input type="password" id="chat-api-key" placeholder="sk-ant-…" autocomplete="off"
+        oninput="App.chatSaveApiKey()">
+      <button class="btn btn-secondary btn-sm" onclick="App.chatToggleKeyVisible()">👁</button>
+      <button class="btn btn-secondary btn-sm" onclick="App.chatClearApiKey()" title="Rensa nyckel">✕</button>
+    </div>
+    <div id="chat-api-status" style="font-size:11px;color:var(--muted);margin-bottom:12px">
+      Nyckeln sparas bara i denna webbläsarsession (sessionStorage).
+    </div>
+
+    <!-- Kontext-badge -->
+    <div id="chat-context-info" class="chat-context-badge" style="display:none">
+      <span>🧬</span><span id="chat-context-text"></span>
+    </div>
+
+    <!-- Snabbfrågor -->
+    <div class="chat-suggestions" id="chat-suggestions">
+      <button class="chat-suggestion" onclick="App.chatSuggest('Varför tror du att det är farfars sida som dominerar?')">Varför farfars sida?</button>
+      <button class="chat-suggestion" onclick="App.chatSuggest('Vilka orter borde jag söka vidare i?')">Vilka orter söka?</button>
+      <button class="chat-suggestion" onclick="App.chatSuggest('Vad borde jag göra härnäst i min forskning?')">Nästa steg?</button>
+      <button class="chat-suggestion" onclick="App.chatSuggest('Förklara de okända träffarna — vilken sida kan de tillhöra?')">Okända träffar?</button>
+      <button class="chat-suggestion" onclick="App.chatSuggest('Hur säker är hypotesen och vad saknas för att stärka den?')">Hur säker är hypotesen?</button>
+      <button class="chat-suggestion" onclick="App.chatSuggest('Sammanfatta analysen för mig med de viktigaste fynden.')">Sammanfatta analysen</button>
+    </div>
+
+    <!-- Meddelandefält -->
+    <div id="chat-messages">
+      <div class="chat-msg system-note">Kör analysen och skriv din fråga — AI:n har tillgång till hela rapporten.</div>
+    </div>
+
+    <!-- Inmatning -->
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Skriv din fråga här…"
+        onkeydown="App.chatKeyDown(event)"></textarea>
+      <button class="btn btn-primary chat-send-btn" onclick="App.chatSend()" id="chat-send-btn">Skicka ↵</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">
+      Enter skickar · Shift+Enter = radbrytning · <button class="btn btn-secondary btn-sm" onclick="App.chatClear()" style="padding:2px 8px">Rensa chatt</button>
+      &nbsp;<button class="btn btn-gold btn-sm" onclick="App.chatAddToReport()" style="padding:2px 8px">📋 Lägg till i analysrapporten</button>
+    </div>
+  </div>
+
 </div>
 
 </main>
@@ -624,7 +809,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '0.9.43'
+  version: '1.0.08'
 };
 
 // Global namespace — filled at end of script
@@ -647,17 +832,17 @@ let activeTesterFilter = 'all';
 // Källa: Blaine Bettinger MRCA-tabeller + ISOGG
 const CM_RELATIONS = [
   { min: 2300, max: 3900, rel: 'Identisk tvilling (Identical twin)', gen: 0 },
-  { min: 1700, max: 3900, rel: 'Förälder/Barn (Parent/Child)', gen: 1 },
-  { min: 1450, max: 2050, rel: 'Syskon (Full sibling)', gen: 1 },
-  { min: 1160, max: 1450, rel: 'Halvsyskon / Farförälder–barnbarn (Half sibling / Grandparent–grandchild)', gen: 2 },
-  { min: 575,  max: 1330, rel: 'Kusin / 2-männing (1st cousin)', gen: 2 },
-  { min: 200,  max: 650,  rel: 'Kusin +1 / 2-männing +1 generation (1st cousin once removed)', gen: 3 },
-  { min: 100,  max: 400,  rel: 'Syssling / 3-männing (2nd cousin)', gen: 3 },
-  { min: 50,   max: 200,  rel: 'Syssling +1 / 3-männing +1 generation (2nd cousin once removed)', gen: 4 },
-  { min: 20,   max: 175,  rel: 'Brylling / 4-männing (3rd cousin)', gen: 4 },
-  { min: 10,   max: 80,   rel: 'Brylling +1 / 4-männing +1 generation (3rd cousin once removed)', gen: 5 },
-  { min: 5,    max: 50,   rel: 'Pyssling / 5-männing (4th cousin)', gen: 5 },
-  { min: 0,    max: 20,   rel: 'Avlägsen släkting / 6-männing eller mer (Distant / 5th cousin or beyond)', gen: 6 },
+  { min: 2376, max: 3720, rel: 'Förälder/Barn (Parent/Child)', gen: 1 },
+  { min: 1613, max: 3488, rel: 'Syskon (Full sibling)', gen: 1 },
+  { min: 1160, max: 2145, rel: 'Halvsyskon / Farförälder–barnbarn (Half sibling / Grandparent–grandchild)', gen: 2 },
+  { min: 396,  max: 1397, rel: 'Kusin / 2-männing (1st cousin)', gen: 2 },
+  { min: 102,  max: 980,  rel: 'Kusin +1 / 2-männing +1 generation (1st cousin once removed)', gen: 3 },
+  { min: 41,   max: 592,  rel: 'Syssling / 3-männing (2nd cousin)', gen: 3 },
+  { min: 0,    max: 316,  rel: 'Syssling +1 / 3-männing +1 generation (2nd cousin once removed)', gen: 4 },
+  { min: 0,    max: 234,  rel: 'Brylling / 4-männing (3rd cousin)', gen: 4 },
+  { min: 0,    max: 173,  rel: 'Brylling +1 / 4-männing +1 generation (3rd cousin once removed)', gen: 5 },
+  { min: 0,    max: 126,  rel: 'Pyssling / 5-männing (4th cousin)', gen: 5 },
+  { min: 0,    max: 60,   rel: 'Avlägsen släkting / 6-männing eller mer (Distant / 5th cousin or beyond)', gen: 6 },
 ];
 
 function renderMatchList() {
@@ -715,12 +900,13 @@ function updateTesterFilterButtons() {
 // TABS
 // ═══════════════════════════════════════════════
 function showTab(name) {
+  const panels = ['personer','triangulering','analys','session','chatt'];
   document.querySelectorAll('.tab').forEach((t,i) => {
-    const panels = ['personer','triangulering','analys','session'];
     t.classList.toggle('active', panels[i] === name);
   });
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'chatt') App.chatRefreshContext();
 }
 
 // ═══════════════════════════════════════════════
@@ -762,7 +948,13 @@ function parseGedcom(text) {
     }
 
     if (cur && !inFam) {
-      if (level === 1 && tag === 'NAME') { cur.name = val.replace(/\//g,'').trim(); curTag = 'NAME'; }
+      if (level === 1 && tag === 'NAME') {
+        // Spara efternamnet (texten inom /.../) separat för exakt matchning
+        const snMatch = val.match(/\/([^/]+)\//);
+        cur.surname = snMatch ? snMatch[1].trim().toLowerCase() : '';
+        cur.name = val.replace(/\//g,'').trim();
+        curTag = 'NAME';
+      }
       else if (level === 1 && tag === 'SEX') { cur.sex = val; }
       else if (level === 1 && tag === 'BIRT') { curTag = 'BIRT'; }
       else if (level === 1 && tag === 'DEAT') { curTag = 'DEAT'; }
@@ -825,6 +1017,9 @@ function loadGedcom(side, input) {
   reader.onload = (e) => {
     const parsed = parseGedcom(e.target.result);
     state['gedcom' + side] = parsed;
+    // Rensa cache — ny GEDCOM gör gamla beräkningar ogiltiga
+    state._geoCache = null;
+    state._branchCache = null;
     // Sort persons alphabetically once, store for search
     parsed.sorted = [...parsed.persons].sort((a,b) => a.name.localeCompare(b.name, 'sv'));
     const statusEl = document.getElementById('gedcomStatus' + side);
@@ -841,6 +1036,10 @@ function loadGedcom(side, input) {
     document.getElementById('person' + side + 'Search').value = '';
     document.getElementById('person' + side + 'Selected').classList.remove('visible');
     renderPersonList(side, '');
+    // Sätt fokus i sökfältet direkt
+    setTimeout(function() {
+      document.getElementById('person' + side + 'Search').focus();
+    }, 50);
     updateTriGedcomCache();
   };
   reader.readAsText(file, 'UTF-8');
@@ -912,6 +1111,8 @@ function openPersonSearch(side) {
 
 function selectPersonResult(side, person) {
   state['person' + side] = person;
+  // Rensa branch-cache — nytt personval kräver ny beräkning
+  state._branchCache = null;
   document.getElementById('person' + side + 'Search').value = person.name;
   document.getElementById('person' + side + 'List').classList.remove('open');
   const birthInfo = [person.born ? 'f. ' + person.born : '', person.bornPlace ? person.bornPlace.split(',')[0] : ''].filter(Boolean).join(', ');
@@ -919,6 +1120,11 @@ function selectPersonResult(side, person) {
   disp.textContent = '✓ Vald: ' + person.name + (birthInfo ? ' (' + birthInfo + ')' : '');
   disp.classList.add('visible');
   document.getElementById('name' + side).value = person.name + (person.born ? ` (f. ${person.born})` : '');
+  // Omräkna sida för alla träffar när personA väljs — anträde-klassificeringen kräver GEDCOM+personA
+  if (side === 'A' && state.matches.length) {
+    state.matches.forEach(function(m){ computeMatchSide(m); });
+    renderMatchList();
+  }
   updateSessionMeta();
 }
 
@@ -1099,49 +1305,90 @@ function addOrMergeMatch(matchName, testerName, cm, segments, meta={}) {
 function computeMatchSide(match) {
   if (!match.testers.length) { match.side = null; return; }
 
-  // Priority 1: configured testers with known branches (Session-fliken)
+  var morBranches = ['mormor','morfar','mormors_far','mormors_mor'];
+  var farBranches = ['farmor','farfar','farmors_far','farmors_mor'];
+  // Grenar som är för generella för att särskilja sida (barn till A, eller okänd)
+  var ambiguousBranches = ['mor','far'];
+
+  // ── Priority 1: testpersoner med SPECIFIK gren (farfar/farmor/morfar/mormor) ──
+  // Exkluderar: matchparet självt (A/B), och barn med gren "mor"/"far"
   if (state.testers && state.testers.length) {
-    var morBranches = ['mor','mormor','morfar','mormors_far','mormors_mor'];
-    var farBranches = ['far','farmor','farfar','farmors_far','farmors_mor'];
     var hasMorMatch = false, hasFarMatch = false;
     match.testers.forEach(function(t) {
       var tConfig = state.testers.find(function(tc){
-        return tc.name.toLowerCase() === t.name.toLowerCase();
+        return tc.name.toLowerCase().replace(/[*†°]+/g,'').trim() ===
+               t.name.toLowerCase().replace(/[*†°]+/g,'').trim();
       });
       if (!tConfig || !tConfig.branch) return;
+      if (ambiguousBranches.indexOf(tConfig.branch) !== -1) return; // barn — hoppa
       if (morBranches.indexOf(tConfig.branch) !== -1) hasMorMatch = true;
       if (farBranches.indexOf(tConfig.branch) !== -1) hasFarMatch = true;
     });
     if (hasMorMatch && !hasFarMatch) { match.side = 'mor'; return; }
     if (hasFarMatch && !hasMorMatch) { match.side = 'far'; return; }
-    if (hasMorMatch && hasFarMatch) { match.side = 'both'; return; }
+    if (hasMorMatch && hasFarMatch)  { match.side = 'both'; return; }
   }
 
-  // Priority 2: fallback on motherName (default 'Ulla') matched against
-  // tester names from CSV. If Ulla matches = mors sida, otherwise = fars sida.
-  // This works even without explicit tester configuration.
-  var motherName = (state.motherName || 'Ulla').toLowerCase().replace(/[*†°]+$/, '');
-  var motherMatches = match.testers.some(function(t) {
-    return t.name.toLowerCase().replace(/[*†°]+$/, '') === motherName;
-  });
-  // Only classify if we actually have more than one unique tester
-  // OR if the motherName tester is explicitly present
-  if (motherMatches) {
-    match.side = 'mor'; return;
-  }
-  // If we have testers but none is Ulla — could be fars sida,
-  // but only say so if we have loaded Ulla's CSV (i.e. 'Ulla' appears
-  // as a tester name in any match)
-  var ullaExists = state.matches.some(function(m) {
-    return m.testers.some(function(t){
-      return t.name.toLowerCase().replace(/[*†°]+$/, '') === motherName;
+  // ── Priority 2: anträdet — matcha gemensamma anor mot GEDCOM-grenar ──
+  // Om anträdets [hakparenteser] innehåller namn från farfar/farmors gren → far
+  // Om de matchar morfar/mormors gren → mor
+  // Detta är den starkaste signalen för träffar med känd härstamning.
+  if (match.antrade && match.antrade.trim() && state.gedcomA && state.personA) {
+    // Extrahera [Namn År–År] ur anträdestexten som lista av {words, year}
+    // Kräver namn-överlapp OCH att födelseår matchar inom ±3 år — undviker fel på
+    // vanliga patronymikon som Persdotter, Jönsson etc.
+    var bracketPersons = [];
+    var bMatches = match.antrade.match(/\[([^\]]+)\]/g) || [];
+    bMatches.forEach(function(b) {
+      var inner = b.slice(1,-1).trim();
+      var yearM = inner.match(/(\d{4})/);
+      var birthYear = yearM ? parseInt(yearM[1]) : null;
+      var nameOnly = inner.replace(/\d{4}[\u2013\-]\d{0,4}/g,'').replace(/\d{4}/g,'').trim().toLowerCase();
+      var nameWords = nameOnly.split(/\s+/).filter(function(w){ return w.length > 2; });
+      if (nameWords.length > 0) bracketPersons.push({ words: nameWords, year: birthYear });
     });
-  });
-  if (ullaExists) {
-    // Ulla's CSV is loaded but she doesn't match this person → fars sida
-    match.side = 'far'; return;
+
+    if (bracketPersons.length > 0) {
+      var branches = (state._branchCache && state._branchCache.branchesA)
+                     || getBranches(state.gedcomA, state.personA.id);
+      if (branches) {
+         function bpMatchesGedcom(bp, p) {
+           if (!p.name) return false;
+           var pSurname = (p.surname || '').toLowerCase().trim();
+           if (!pSurname) {
+             var pw = p.name.replace(/\*/g,'').toLowerCase().split(/\s+/).filter(function(w){ return w.length > 2; });
+             pSurname = pw.length > 0 ? pw[pw.length - 1] : '';
+           }
+           var bpLast = bp.words.length > 0 ? bp.words[bp.words.length - 1] : null;
+           if (!bpLast || pSurname !== bpLast) return false;
+           var bpFirst = bp.words.length > 0 ? bp.words[0] : null;
+           var pwords = p.name.replace(/\*/g,'').toLowerCase().split(/\s+/);
+           if (!bpFirst || !pwords.some(function(pw){ return pw === bpFirst; })) return false;
+           if (bp.year) {
+             if (!p.born) return false;
+             var py = parseInt(p.born);
+             if (!isNaN(py) && Math.abs(py - bp.year) > 3) return false;
+           }
+           return true;
+         }
+        var farScore = 0, morScore = 0;
+        ['farfar','farmor'].forEach(function(br) {
+          (branches[br] || []).forEach(function(p) {
+            bracketPersons.forEach(function(bp) { if (bpMatchesGedcom(bp, p)) farScore++; });
+          });
+        });
+        ['morfar','mormor'].forEach(function(br) {
+          (branches[br] || []).forEach(function(p) {
+            bracketPersons.forEach(function(bp) { if (bpMatchesGedcom(bp, p)) morScore++; });
+          });
+        });
+        if (farScore > 0 && farScore >= morScore) { match.side = 'far'; return; }
+        if (morScore > 0 && morScore > farScore)  { match.side = 'mor'; return; }
+      }
+    }
   }
-  // No Ulla CSV loaded at all → unknown
+
+  // ── Priority 3: okänd sida — inte tillräckligt med information ──
   match.side = null;
 }
 
@@ -1848,39 +2095,40 @@ function expectedCmForRelation(relText) {
   // Parents / children
   if (r.includes('förälder') || r.includes('parent') || r.includes('child') ||
       (r.includes('far') && r.includes('barn')) || (r.includes('mor') && r.includes('barn')))
-    return { min:1700, max:3900 };
-  // Siblings
-  if (r.includes('halvsyskon') || r.includes('half sib')) return { min:1160, max:1450 };
-  if (r.includes('syskon') || r.includes('sibling'))      return { min:1450, max:2050 };
-  // Grandparent
-  if (r.includes('farförälder') || r.includes('morförälder') || r.includes('grandparent') ||
-      r.includes('grandchild'))                            return { min:1160, max:1450 };
+    return { min:2376, max:3720 };
+  // Half siblings / grandparent
+  if (r.includes('halvsyskon') || r.includes('half sib') ||
+      r.includes('farförälder') || r.includes('morförälder') || r.includes('grandparent') ||
+      r.includes('grandchild'))
+    return { min:1160, max:2145 };
+  // Full siblings
+  if (r.includes('syskon') || r.includes('sibling'))
+    return { min:1613, max:3488 };
+  // 2-männing +1 / Kusin +1 (1st cousin once removed) — kontrollera +1 INNAN ren kusin
+  if ((r.includes('2-männing') && r.includes('+1')) ||
+      r.includes('1st cousin once') || (r.includes('kusin') && r.includes('+1')))
+    return { min:102, max:980 };
   // 2-männing / Kusin (1st cousin)
   if (r.includes('2-männing') || r.includes('1st cousin') ||
       (/kusin/.test(r) && !r.includes('+') && !r.includes('syssling')))
-    return { min:575, max:1330 };
-  // 2-männing +1 / Kusin +1 (1st cousin once removed)
-  if ((r.includes('2-männing') && r.includes('+1')) ||
-      r.includes('1st cousin once') || (r.includes('kusin') && r.includes('+1')))
-    return { min:200, max:650 };
-  // 3-männing / Syssling (2nd cousin)
-  if (r.includes('3-männing') || r.includes('syssling') || r.includes('2nd cousin') ||
-      (/syssling/.test(r) && !r.includes('+')))
-    return { min:100, max:400 };
-  // 3-männing +1 / Syssling +1 (2nd cousin once removed)
+    return { min:396, max:1397 };
+  // 3-männing +1 / Syssling +1 (2nd cousin once removed) — kontrollera +1 INNAN ren syssling
   if ((r.includes('syssling') && r.includes('+1')) ||
       r.includes('2nd cousin once') || (r.includes('3-männing') && r.includes('+1')))
-    return { min:50, max:200 };
-  // 4-männing / Brylling (3rd cousin)
-  if (r.includes('4-männing') || r.includes('brylling') || r.includes('3rd cousin'))
-    return { min:20, max:175 };
-  // 4-männing +1 / Brylling +1 (3rd cousin once removed)
+    return { min:0, max:316 };
+  // 3-männing / Syssling (2nd cousin)
+  if (r.includes('3-männing') || r.includes('syssling') || r.includes('2nd cousin'))
+    return { min:41, max:592 };
+  // 4-männing +1 / Brylling +1 (3rd cousin once removed) — kontrollera +1 INNAN ren brylling
   if ((r.includes('brylling') && r.includes('+1')) ||
       r.includes('3rd cousin once') || (r.includes('4-männing') && r.includes('+1')))
-    return { min:10, max:80 };
+    return { min:0, max:173 };
+  // 4-männing / Brylling (3rd cousin)
+  if (r.includes('4-männing') || r.includes('brylling') || r.includes('3rd cousin'))
+    return { min:0, max:234 };
   // 5-männing / Pyssling (4th cousin)
   if (r.includes('5-männing') || r.includes('pyssling') || r.includes('4th cousin'))
-    return { min:5, max:50 };
+    return { min:0, max:126 };
   return null;
 }
 
@@ -1889,33 +2137,44 @@ function findGeoOverlap(gedcomA, gedcomB) {
   if (!gedcomA || !gedcomB) return { strong: [], weak: [] };
   var placesA = extractPlaceTimes(gedcomA.persons);
   var placesB = extractPlaceTimes(gedcomB.persons);
-  var strong = []; // ≤10 years
-  var weak   = []; // 11–20 years
+  var strong = [];
+  var weak   = [];
   var seenStrong = new Set();
   var seenWeak   = new Set();
 
+  // Bygg index för B: normPlats -> lista av poster  (O(n) istället för O(n²))
+  var indexB = new Map();
+  for (var bi = 0; bi < placesB.length; bi++) {
+    var b = placesB[bi];
+    if (!b.place || !b.year || isCemeteryPlace(b.place)) continue;
+    var bp = normPlace(b.place);
+    if (!bp) continue;
+    if (!indexB.has(bp)) indexB.set(bp, []);
+    indexB.get(bp).push(b);
+  }
+
   for (var ai = 0; ai < placesA.length; ai++) {
     var a = placesA[ai];
-    if (!a.place || isCemeteryPlace(a.place)) continue;
-    for (var bi = 0; bi < placesB.length; bi++) {
-      var b = placesB[bi];
-      if (!b.place || isCemeteryPlace(b.place)) continue;
-      var ap = normPlace(a.place), bp = normPlace(b.place);
-      if (!ap || !bp) continue;
-      if (ap !== bp && !ap.includes(bp) && !bp.includes(ap)) continue;
-      var placeKey = ap;
-      var diff = (a.year && b.year) ? Math.abs(a.year - b.year) : null;
-      if (diff === null) continue; // skip if no dates
-      if (diff <= 10 && !seenStrong.has(placeKey)) {
-        seenStrong.add(placeKey);
+    if (!a.place || !a.year || isCemeteryPlace(a.place)) continue;
+    var ap = normPlace(a.place);
+    if (!ap) continue;
+    if (seenStrong.has(ap)) continue; // redan hittad som stark — hoppa
+
+    var bList = indexB.get(ap) || [];
+    for (var k = 0; k < bList.length; k++) {
+      var b = bList[k];
+      var diff = Math.abs(a.year - b.year);
+      if (diff <= 10 && !seenStrong.has(ap)) {
+        seenStrong.add(ap);
+        seenWeak.delete(ap); // uppgradera om den låg i weak
         strong.push({ place: a.place, parish: displayParish(a.place), yearA: a.year, yearB: b.year, personA: a.person, sexA: a.sex, bornA: a.born, personB: b.person, sexB: b.sex, bornB: b.born, diff: diff });
-      } else if (diff <= 20 && !seenWeak.has(placeKey) && !seenStrong.has(placeKey)) {
-        seenWeak.add(placeKey);
+        break;
+      } else if (diff <= 20 && !seenWeak.has(ap) && !seenStrong.has(ap)) {
+        seenWeak.add(ap);
         weak.push({ place: a.place, parish: displayParish(a.place), yearA: a.year, yearB: b.year, personA: a.person, sexA: a.sex, bornA: a.born, personB: b.person, sexB: b.sex, bornB: b.born, diff: diff });
       }
     }
   }
-  // Sort by diff ascending
   strong.sort(function(a,b){ return a.diff - b.diff; });
   weak.sort(function(a,b){ return a.diff - b.diff; });
   return { strong: strong, weak: weak };
@@ -2045,6 +2304,14 @@ function findFatherlessMatches(gedcomBase, gedcomOther, windowYears = 16) {
 function runAnalysis() {
   showTab('analys');
   document.getElementById('analysisOutput').innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:40px;margin-bottom:12px">⏳</div><div style="font-size:14px">Analyserar...</div></div>';
+  // Räkna om sidor för alla träffar här — GEDCOM och person är nu säkert valda.
+  // computeMatchSide anropades tidigare vid CSV-import (innan GEDCOM laddades)
+  // och måste köras igen nu när anträde-matchningen mot GEDCOM är möjlig.
+  if (state.gedcomA && state.personA && state.matches.length) {
+    state.matches.forEach(function(m){ computeMatchSide(m); });
+  }
+  // Rensa cache så grenananalysen räknas om med uppdaterade sidor
+  state._branchCache = null;
   // Defer actual analysis so spinner renders first
   setTimeout(function() { runAnalysisCore(); }, 50);
 }
@@ -2074,8 +2341,11 @@ function getBranches(gedcom, personId) {
   }
 
   // Get all ancestors on a given branch as flat array
+  var _visitedAncestors = new Set(); // skydd mot cirkelreferenser i GEDCOM
   function getAncestors(p, depth) {
     if (!p || depth > 12) return [];
+    if (_visitedAncestors.has(p.id)) return []; // cirkelskydd
+    _visitedAncestors.add(p.id);
     var results = [p];
     var parents = getParents(p);
     if (parents.father) results = results.concat(getAncestors(parents.father, depth+1));
@@ -2139,18 +2409,18 @@ function addTesterBranch() {
   var name   = document.getElementById('newTesterName').value.trim();
   var branch = document.getElementById('newTesterBranch').value;
   var note   = document.getElementById('newTesterNote').value.trim();
+  var cmBRaw = document.getElementById('newTesterCmB').value.trim();
+  var cmB    = cmBRaw ? parseFloat(cmBRaw) : null;
   if (!name) { alert('Ange ett förnamn.'); return; }
-  // Remove existing entry with same name
   state.testers = state.testers.filter(function(t){ return t.name.toLowerCase() !== name.toLowerCase(); });
-  state.testers.push({ name: name, branch: branch, note: note });
-  // Update motherName: person with mor/mormor/morfar branch
+  state.testers.push({ name: name, branch: branch, note: note, cmB: cmB });
   var morPerson = state.testers.find(function(t){ return t.branch === 'mor' || t.branch === 'mormor' || t.branch === 'morfar'; });
   if (morPerson) { state.motherName = morPerson.name; state.motherNameSetByUser = true; }
   renderTesterBranchList();
   document.getElementById('newTesterName').value = '';
   document.getElementById('newTesterBranch').value = '';
   document.getElementById('newTesterNote').value = '';
-  // Re-compute match sides
+  document.getElementById('newTesterCmB').value = '';
   state.matches.forEach(function(m){ computeMatchSide(m); });
   renderMatchList();
 }
@@ -2165,9 +2435,11 @@ function renderTesterBranchList() {
   el.innerHTML = state.testers.map(function(t, i) {
     var col = testerColor(t.name);
     var brLabel = BRANCH_LABELS[t.branch] || 'Okänd';
+    var cmBStr = t.cmB != null ? '<span style="font-size:11px;color:var(--green)">' + t.cmB + ' cM mot B</span>' : '';
     return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)">' +
       '<span class="tester-badge" style="background:'+col.bg+';color:'+col.fg+';border:1px solid '+col.border+'">'+escH(t.name)+'</span>' +
       '<span style="font-size:12px;color:var(--accent2)">'+escH(brLabel)+'</span>' +
+      cmBStr +
       (t.note ? '<span style="font-size:11px;color:var(--muted)">'+escH(t.note)+'</span>' : '') +
       '<button class="btn btn-sm" style="background:var(--accent);color:#fff;margin-left:auto" onclick="App.removeTesterBranch('+i+')">✕</button>' +
       '</div>';
@@ -2186,6 +2458,7 @@ function scoreBranches(branchesA, gedcomB, matches, motherName) {
 
   // Which side do our matches point to?
   // Use tester branch knowledge to weight sides more precisely
+  // Träffar med kända anträden viktas 3× jämfört med anonyma träffar
   var branchScores = { farfar:0, farmor:0, farmors_far:0, farmors_mor:0,
                        morfar:0, mormor:0, mormors_far:0, mormors_mor:0 };
   var hasDetailedBranches = false;
@@ -2196,11 +2469,124 @@ function scoreBranches(branchesA, gedcomB, matches, motherName) {
         return m.testers.some(function(t){ return t.name === tester.name; });
       });
       if (matchesForTester.length && branchScores.hasOwnProperty(tester.branch)) {
-        branchScores[tester.branch] += matchesForTester.length;
+        // Vikta träffar med kända anträden 3× tyngre
+        matchesForTester.forEach(function(m) {
+          var weight = (m.antrade && m.antrade.trim()) ? 3 : 1;
+          branchScores[tester.branch] += weight;
+        });
         hasDetailedBranches = true;
       }
     });
   }
+
+  // Ändring 1: Matcha gemensamma anor ur anträdena mot GEDCOM-grenar
+  // Om en nämnd ana finns i en gren → ge den grenen tungt tillägg
+  var antradeBranchBonus = { farfar:0, farmor:0, morfar:0, mormor:0 };
+  var antradeBranchMatched = false;
+  var antradeTraffarPerGren = { farfar:0, farmor:0, morfar:0, mormor:0 };
+  if (matches && branchesA) {
+    // Steg 1: Samla ord (>3 tecken) ur hakparenteser i anträdena → { ord: count }
+    // Extrahera [Namn År] ur alla anträden — matcha med BÅDE namn OCH födelseår (±3 år)
+    // Förhindrar falska träffar på vanliga patronymikon som Persdotter, Jönsson etc.
+    var antradeBracketPersons = [];
+    matches.forEach(function(m) {
+      if (!m.antrade || !m.antrade.trim()) return;
+      var brackets = m.antrade.match(/\[([^\]]+)\]/g) || [];
+      brackets.forEach(function(b) {
+        var inner = b.slice(1,-1).trim();
+        var yearM = inner.match(/(\d{4})/);
+        var birthYear = yearM ? parseInt(yearM[1]) : null;
+        var nameOnly = inner.replace(/\d{4}[\u2013\-]\d{0,4}/g,'').replace(/\d{4}/g,'').trim().toLowerCase();
+        var nameWords = nameOnly.split(/\s+/).filter(function(w){ return w.length > 2; });
+        if (nameWords.length > 0) antradeBracketPersons.push({ words: nameWords, year: birthYear });
+      });
+    });
+
+    if (antradeBracketPersons.length > 0) {
+      function antMatchesGedcom(bp, p) {
+        if (!p.name) return false;
+        // Surname från /.../ i GEDCOM — det verkliga efternamnet
+        var pSurname = (p.surname || '').toLowerCase().trim();
+        if (!pSurname) {
+          var pw = p.name.replace(/\*/g,'').toLowerCase().split(/\s+/).filter(function(w){ return w.length > 2; });
+          pSurname = pw.length > 0 ? pw[pw.length - 1] : '';
+        }
+        // Kräv alltid: efternamnet matchar
+        var bpLast = bp.words.length > 0 ? bp.words[bp.words.length - 1] : null;
+        if (!bpLast || pSurname !== bpLast) return false;
+        // Kräv alltid: förnamnet matchar (första ordet i anträdestexten)
+        var bpFirst = bp.words.length > 0 ? bp.words[0] : null;
+        var pwords = p.name.replace(/\*/g,'').toLowerCase().split(/\s+/);
+        if (!bpFirst || !pwords.some(function(pw){ return pw === bpFirst; })) return false;
+        // Födelseår: om anträdespersonen har år
+        if (bp.year) {
+          if (!p.born) return false; // GEDCOM saknar år — kan inte bekräfta rätt person
+          var py = parseInt(p.born);
+          if (!isNaN(py) && Math.abs(py - bp.year) > 3) return false;
+        }
+        return true;
+      }
+      // Bygg ett Set av (förnamn+efternamn+år)-strängar per GEDCOM-gren för snabb uppslagning
+      var branchAncestorSets = {};
+      ['farfar','farmor','morfar','mormor'].forEach(function(branch) {
+        var s = new Set();
+        (branchesA[branch] || []).forEach(function(p) {
+          if (p.name) {
+            var sn = (p.surname || '').toLowerCase();
+            var fn = p.name.replace(/\*/g,'').toLowerCase().split(/\s+/)[0] || '';
+            var yr = p.born ? String(parseInt(p.born)) : '';
+            s.add(fn + '|' + sn + '|' + yr);
+          }
+        });
+        branchAncestorSets[branch] = s;
+      });
+
+      // Räkna hur många TRÄFFAR (inte anor) vars anträden bekräftar varje gren
+      // Detta ger farfar 15 träffar mot mormors 2 — skillnaden syns i poängen
+      var antradeTraffarPerGren = { farfar:0, farmor:0, morfar:0, mormor:0 };
+      matches.forEach(function(m) {
+        if (!m.antrade || !m.antrade.trim()) return;
+        var brackets = m.antrade.match(/\[([^\]]+)\]/g) || [];
+        var bpList = [];
+        brackets.forEach(function(b) {
+          var inner = b.slice(1,-1).trim();
+          var yearM = inner.match(/(\d{4})/);
+          var birthYear = yearM ? parseInt(yearM[1]) : null;
+          var nameOnly = inner.replace(/\d{4}[\u2013\-]\d{0,4}/g,'').replace(/\d{4}/g,'').trim().toLowerCase();
+          var nameWords = nameOnly.split(/\s+/).filter(function(w){ return w.length > 2; });
+          if (nameWords.length > 0) bpList.push({ words: nameWords, year: birthYear });
+        });
+        ['farfar','farmor','morfar','mormor'].forEach(function(branch) {
+          var aSet = branchAncestorSets[branch];
+          var hit = bpList.some(function(bp) {
+            var bpLast = bp.words[bp.words.length - 1];
+            var bpFirst = bp.words[0];
+            var bpYr = bp.year ? String(bp.year) : '';
+            // Kontrollera alla år inom ±3
+            if (!bpYr) return false;
+            for (var dy = -3; dy <= 3; dy++) {
+              var tryYr = String(bp.year + dy);
+              if (aSet.has(bpFirst + '|' + bpLast + '|' + tryYr)) return true;
+            }
+            return false;
+          });
+          if (hit) {
+            antradeTraffarPerGren[branch]++;
+            antradeBranchMatched = true;
+          }
+        });
+      });
+
+      // Sätt antradeBranchBonus baserat på antal träffar (ej cap)
+      ['farfar','farmor','morfar','mormor'].forEach(function(branch) {
+        antradeBranchBonus[branch] = antradeTraffarPerGren[branch] * 20;
+        if (antradeTraffarPerGren[branch] > 0) {
+          console.log('[DNA] Anträde-träffar på', branch + ':', antradeTraffarPerGren[branch], 'träffar → bonus', antradeBranchBonus[branch]);
+        }
+      });
+    }
+  }
+
   var morMatches  = matches.filter(function(m){ return m.side === 'mor'; }).length;
   var farMatches  = matches.filter(function(m){ return m.side === 'far'; }).length;
   var totalSided  = morMatches + farMatches;
@@ -2208,6 +2594,16 @@ function scoreBranches(branchesA, gedcomB, matches, motherName) {
   var morWeight   = totalSided ? morMatches / totalSided : 0.5;
 
   var placesB = extractPlaceTimes(gedcomB.persons);
+  // Bygg index för B en gång — återanvänd för alla grenar (O(n) istället för O(n²) per gren)
+  var indexBScore = new Map();
+  placesB.forEach(function(b) {
+    if (!b.place || isCemeteryPlace(b.place)) return;
+    var bp = normPlace(b.place);
+    if (!bp) return;
+    if (!indexBScore.has(bp)) indexBScore.set(bp, []);
+    indexBScore.get(bp).push(b);
+  });
+
   Object.keys(branchNames).forEach(function(branch) {
     var ancestors = branchesA[branch] || [];
     if (!ancestors.length) { scores[branch] = { score: 0, label: branchNames[branch], ancestors: 0, geoHits: 0, reasons: [] }; return; }
@@ -2215,13 +2611,13 @@ function scoreBranches(branchesA, gedcomB, matches, motherName) {
     var reasons = [];
     var score = 0;
 
-    // DNA side weight — use detailed branch knowledge if available
+    // DNA side weight — baseras ENBART på bekräftade sidor (anträde eller specifik testperson)
+    // Okända sidor ignoreras — de kan vara vilken sida som helst, inkl. dubbelkuslighet
     var isFarSide = branch === 'farfar' || branch === 'farmor' || branch === 'farmors_far' || branch === 'farmors_mor';
     var isMorSide = branch === 'morfar' || branch === 'mormor' || branch === 'mormors_far' || branch === 'mormors_mor';
     if (hasDetailedBranches) {
-      // Use specific branch match count
+      // Specifika testpersoner med känd gren — starkaste signal
       var specificCount = branchScores[branch] || 0;
-      // Also count related branches (e.g. farmors_far contributes to farmor)
       var parentBranch = branch.includes('_') ? branch.split('_')[0] : null;
       if (parentBranch && branchScores[parentBranch]) specificCount += branchScores[parentBranch] * 0.5;
       if (specificCount > 0) {
@@ -2229,31 +2625,28 @@ function scoreBranches(branchesA, gedcomB, matches, motherName) {
         score += pts;
         reasons.push('Testpersoner med känd gren pekar hit: ' + specificCount + ' träffar');
       }
-    } else {
-      // Fall back to simple far/mor weighting
-      if (isFarSide && farWeight > 0.5) {
-        score += Math.round(farWeight * 40);
-        reasons.push('DNA-träffar pekar mot fars sida (' + farMatches + ' av ' + totalSided + ' träffar)');
-      } else if (isMorSide && morWeight > 0.5) {
-        score += Math.round(morWeight * 40);
-        reasons.push('DNA-träffar pekar mot mors sida (' + morMatches + ' av ' + totalSided + ' träffar)');
-      } else if (totalSided === 0) {
-        score += 10;
-        reasons.push('DNA-sida okänd — ingen mor-testperson laddad');
-      }
     }
+    // Bekräftade sidor via anträden (computeMatchSide priority 2)
+    if (isFarSide && farMatches > 0) {
+      score += Math.min(40, farMatches * 10);
+      reasons.push('DNA-träffar bekräftade på fars sida via anträde (' + farMatches + ' träffar)');
+    } else if (isMorSide && morMatches > 0) {
+      score += Math.min(40, morMatches * 10);
+      reasons.push('DNA-träffar bekräftade på mors sida via anträde (' + morMatches + ' träffar)');
+    }
+    // Okända sidor viktas INTE — de kan vara vilken sida som helst
 
-    // Geo overlap
+    // Geo overlap — indexbaserad, O(n) per gren
     var placesA = extractPlaceTimes(ancestors);
     var geoHits = 0;
     var geoPlaces = new Set();
     placesA.forEach(function(a) {
       if (!a.place || isCemeteryPlace(a.place)) return;
-      placesB.forEach(function(b) {
-        if (!b.place || isCemeteryPlace(b.place)) return;
-        var ap = normPlace(a.place), bp = normPlace(b.place);
-        if (!ap || !bp) return;
-        if (ap === bp || ap.includes(bp) || bp.includes(ap)) {
+      var ap = normPlace(a.place);
+      if (!ap) return;
+      var bList = indexBScore.get(ap) || [];
+      bList.forEach(function(b) {
+        if (ap === normPlace(b.place)) {
           if (!a.year || !b.year || Math.abs(a.year - b.year) <= 20) {
             geoHits++;
             geoPlaces.add(displayParish(a.place));
@@ -2262,7 +2655,9 @@ function scoreBranches(branchesA, gedcomB, matches, motherName) {
       });
     });
     if (geoHits > 0) {
-      var geoScore = Math.min(40, geoHits * 8);
+      // Geo viktas lägre än DNA-anträden — max 15 poäng (var 40)
+      // Geografisk överlapp är stödbevis, inte primärt bevis
+      var geoScore = Math.min(15, geoHits * 2);
       score += geoScore;
       reasons.push('Geografisk överlapp: ' + Array.from(geoPlaces).slice(0,3).join(', ') + ' (' + geoHits + ' ortsträff' + (geoHits>1?'ar':'') + ')');
     }
@@ -2272,6 +2667,16 @@ function scoreBranches(branchesA, gedcomB, matches, motherName) {
     if (ancBonus > 0) {
       score += ancBonus;
       reasons.push(ancestors.length + ' kända anor på denna gren');
+    }
+
+    // Anträde-bonus: gemensamma anor ur anträdena matchade mot denna gren
+    var topBranch4 = branch.replace('farmors_far','farmor').replace('farmors_mor','farmor')
+                           .replace('mormors_far','mormor').replace('mormors_mor','mormor');
+    var aBonus = antradeBranchBonus[topBranch4] || 0;
+    if (aBonus > 0) {
+      var antTraffarCount = (antradeTraffarPerGren && antradeTraffarPerGren[topBranch4]) || 0;
+      score += aBonus; // ingen cap — fler träffar = mer poäng
+      reasons.push('Gemensamma anor i anträdena bekräftade på denna gren (starkaste signal) — ' + antTraffarCount + ' träff' + (antTraffarCount !== 1 ? 'ar' : '') + ' bekräftar');
     }
 
     scores[branch] = { score: Math.max(0, score), label: branchNames[branch], ancestors: ancestors.length, geoHits: geoHits, reasons: reasons };
@@ -2286,6 +2691,9 @@ function scoreBranches(branchesA, gedcomB, matches, motherName) {
   } else {
     Object.keys(scores).forEach(function(k){ scores[k].pct = 25; });
   }
+  // Returnera även antrade-bonus-info för varning i hypotesen
+  scores._antradeBranchBonus = antradeBranchBonus;
+  scores._antradeBranchMatched = antradeBranchMatched;
   return scores;
 }
 
@@ -2296,6 +2704,44 @@ function runAnalysisCore() {
   const ab_seg = parseInt(document.getElementById('ab_seg').value) || null;
   const ab_longest = parseFloat(document.getElementById('ab_longest').value) || null;
 
+  // ── CACHE: beräkna tunga operationer EN gång per analys ──
+  var _t0 = performance.now();
+  console.log('[DNA] Analys startar. Matches:', state.matches.length,
+    'GedcomA:', state.gedcomA ? state.gedcomA.persons.length + ' pers' : 'saknas',
+    'GedcomB:', state.gedcomB ? state.gedcomB.persons.length + ' pers' : 'saknas');
+
+  if (!state._geoCache && state.gedcomA && state.gedcomB) {
+    var _tGeo = performance.now();
+    state._geoCache = findGeoOverlap(state.gedcomA, state.gedcomB);
+    console.log('[DNA] findGeoOverlap klar:', Math.round(performance.now()-_tGeo) + 'ms');
+  } else {
+    console.log('[DNA] findGeoOverlap: cache används');
+  }
+
+  if (!state._branchCache && state.gedcomA && state.personA) {
+    var _tBranch = performance.now();
+    console.log('[DNA] getBranches startar...');
+    var _bA = getBranches(state.gedcomA, state.personA.id);
+    console.log('[DNA] getBranches A klar:', Math.round(performance.now()-_tBranch) + 'ms',
+      'farfar:', _bA ? _bA.farfar.length : 0, 'farmor:', _bA ? _bA.farmor.length : 0,
+      'morfar:', _bA ? _bA.morfar.length : 0, 'mormor:', _bA ? _bA.mormor.length : 0);
+    var _bB = (state.gedcomB && state.personB) ? getBranches(state.gedcomB, state.personB.id) : null;
+    console.log('[DNA] getBranches B klar:', Math.round(performance.now()-_tBranch) + 'ms');
+    var _tScore = performance.now();
+    console.log('[DNA] scoreBranches startar...');
+    state._branchCache = {
+      branchesA: _bA,
+      branchesB: _bB,
+      scoresA: _bA ? scoreBranches(_bA, state.gedcomB || state.gedcomA, state.matches, state.motherName) : null,
+      scoresB: _bB ? scoreBranches(_bB, state.gedcomA || state.gedcomB, state.matches, state.motherName) : null
+    };
+    console.log('[DNA] scoreBranches klar:', Math.round(performance.now()-_tScore) + 'ms');
+  } else {
+    console.log('[DNA] branchCache: används');
+  }
+  console.log('[DNA] Cache-fas klar:', Math.round(performance.now()-_t0) + 'ms');
+
+  console.log('[DNA] Cache-fas klar, bygger HTML...');
   let html = `<div class="card"><div class="card-title">🔍 Analysresultat — ${escH(nameA)} ↔ ${escH(nameB)}</div>`;
 
   // ── 1. RELATIONSUPPSKATTNING ──
@@ -2323,9 +2769,23 @@ function runAnalysisCore() {
   if (!state.matches.length) {
     html += `<div class="finding">Inga gemensamma DNA-träffar inlagda.</div>`;
   } else {
-    const morSide = state.matches.filter(m => m.side === 'mor');
-    const farSide = state.matches.filter(m => m.side === 'far');
-    const unknown = state.matches.filter(m => !m.side);
+    var _nameBclean = nameB.replace(/\s*\(f\..*\)/, '').replace(/[*†°]+/g,'').trim().toLowerCase();
+    var _nameAclean = nameA.replace(/\s*\(f\..*\)/, '').replace(/[*†°]+/g,'').trim().toLowerCase();
+    var _isMatchPair = function(m) {
+      var mn = m.name.toLowerCase().replace(/[*†°]+/g,'').trim();
+      return mn === _nameBclean || mn === _nameAclean;
+    };
+    // Identifiera barn/barnbarn till A via relA-fältet
+    var _childRelWords = ['dotter','son','barnbarn','barn','granddaughter','grandson','grandchild','child','daughter'];
+    var _isChildOfA = function(m) {
+      if (!m.relA) return false;
+      var r = m.relA.toLowerCase().trim();
+      return _childRelWords.some(function(w){ return r.includes(w); });
+    };
+    const childrenOfA = state.matches.filter(m => !_isMatchPair(m) && _isChildOfA(m));
+    const morSide = state.matches.filter(m => m.side === 'mor' && !_isMatchPair(m) && !_isChildOfA(m));
+    const farSide = state.matches.filter(m => m.side === 'far' && !_isMatchPair(m) && !_isChildOfA(m));
+    const unknown = state.matches.filter(m => !m.side && !_isMatchPair(m) && !_isChildOfA(m));
     // Cross-file: matches appearing in 2+ testers
     const multiTester = state.matches.filter(m => m.testers.length > 1);
     if (multiTester.length) {
@@ -2344,9 +2804,13 @@ function runAnalysisCore() {
         </div>`;
       });
     }
-    if (morSide.length) html += `<div class="finding good"><strong>${morSide.length} träff(ar) på mors sida:</strong> ${morSide.map(m=>`<span class="tag tag-green">${escH(m.name)}</span>`).join('')}</div>`;
-    if (farSide.length) html += `<div class="finding good"><strong>${farSide.length} träff(ar) på fars sida:</strong> ${farSide.map(m=>`<span class="tag tag-green">${escH(m.name)}</span>`).join('')}</div>`;
-    if (unknown.length) html += `<div class="finding warn"><strong>${unknown.length} träff(ar) med okänd sida:</strong> ${unknown.map(m=>`<span class="tag tag-yellow">${escH(m.name)}</span>`).join('')}</div>`;
+    if (childrenOfA.length) html += `<div class="finding" style="border-left-color:var(--accent2)"><strong>${childrenOfA.length} träff(ar) är barn/barnbarn till A</strong> — matchar på alla grenar och används ej för sidklassificering: ${childrenOfA.map(m=>`<span class="tag">${escH(m.name)} (${escH(m.relA)})</span>`).join('')}</div>`;
+    if (farSide.length) html += `<div class="finding good"><strong>${farSide.length} träff(ar) bekräftade på fars sida</strong> (via anträde eller specifik testperson): ${farSide.map(m=>`<span class="tag tag-green">${escH(m.name)}</span>`).join('')}</div>`;
+    if (morSide.length) html += `<div class="finding good"><strong>${morSide.length} träff(ar) bekräftade på mors sida</strong> (via anträde eller specifik testperson): ${morSide.map(m=>`<span class="tag tag-green">${escH(m.name)}</span>`).join('')}</div>`;
+    if (unknown.length) {
+      html += `<div class="finding warn"><strong>${unknown.length} träff(ar) med okänd sida:</strong> ${unknown.map(m=>`<span class="tag tag-yellow">${escH(m.name)}</span>`).join('')}`;
+      html += `<div style="font-size:11px;margin-top:4px;color:var(--muted)">ℹ Dessa träffar saknar anträde och specifik testperson med känd gren. Trianguleringen visar att de kan dela gemensam gren sinsemellan — men det kan vara en <em>annan</em> gren hos B, på vilken sida som helst. Dubbelkuslighet (släktskap på både svärdssida och spinnsida) kan förekomma.</div></div>`;
+    }
 
     // Triangulation overlaps
     const overlapMap = buildOverlapMap(state.matches);
@@ -2399,7 +2863,7 @@ function runAnalysisCore() {
   if (!state.gedcomA || !state.gedcomB) {
     html += `<div class="finding warn">Ladda GEDCOM-filer för A och B för att köra geografisk analys.</div>`;
   } else {
-    var geoResult = findGeoOverlap(state.gedcomA, state.gedcomB);
+    var geoResult = (state._geoCache) || findGeoOverlap(state.gedcomA, state.gedcomB);
     var strongHits = geoResult.strong;
     var weakHits   = geoResult.weak;
     if (!strongHits.length && !weakHits.length) {
@@ -2443,19 +2907,19 @@ function runAnalysisCore() {
     </div>`;
   var personAId = state.personA ? state.personA.id : null;
   var personBId = state.personB ? state.personB.id : null;
-  var branchesA = state.gedcomA ? getBranches(state.gedcomA, personAId) : null;
-  var branchesB = state.gedcomB ? getBranches(state.gedcomB, personBId) : null;
+  var branchesA = (state._branchCache && state._branchCache.branchesA) || (state.gedcomA ? getBranches(state.gedcomA, personAId) : null);
+  var branchesB = (state._branchCache && state._branchCache.branchesB) || (state.gedcomB ? getBranches(state.gedcomB, personBId) : null);
 
   if (!branchesA && !branchesB) {
     html += `<div class="finding warn">Ladda GEDCOM-filer och välj Person A och B i träden för grenananalys.</div>`;
   } else {
-    var scoresA = branchesA ? scoreBranches(branchesA, state.gedcomB || state.gedcomA, state.matches, state.motherName) : null;
-    var scoresB = branchesB ? scoreBranches(branchesB, state.gedcomA || state.gedcomB, state.matches, state.motherName) : null;
+    var scoresA = (state._branchCache && state._branchCache.scoresA) || (branchesA ? scoreBranches(branchesA, state.gedcomB || state.gedcomA, state.matches, state.motherName) : null);
+    var scoresB = (state._branchCache && state._branchCache.scoresB) || (branchesB ? scoreBranches(branchesB, state.gedcomA || state.gedcomB, state.matches, state.motherName) : null);
 
     // Show A's branches
     if (scoresA) {
       html += `<div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:8px">Sett från ${escH(nameA)}s perspektiv:</div>`;
-      var sortedA = Object.entries(scoresA).sort(function(a,b){ return b[1].pct - a[1].pct; });
+      var sortedA = Object.entries(scoresA).filter(function(e){ return !e[0].startsWith('_'); }).sort(function(a,b){ return b[1].pct - a[1].pct; });
       sortedA.forEach(function(entry) {
         var k = entry[0], v = entry[1];
         var barColor = v.pct > 50 ? 'var(--green)' : v.pct > 25 ? 'var(--gold)' : 'var(--muted)';
@@ -2475,7 +2939,7 @@ function runAnalysisCore() {
 
     // Sub-branch if one dominates clearly (>50%)
     if (scoresA) {
-      var topBranch = Object.entries(scoresA).sort(function(a,b){ return b[1].pct-a[1].pct; })[0];
+      var topBranch = Object.entries(scoresA).filter(function(e){ return !e[0].startsWith('_'); }).sort(function(a,b){ return b[1].pct-a[1].pct; })[0];
       if (topBranch && topBranch[1].pct > 45) {
         // Try to go one level deeper: grandparent's parents
         var topKey = topBranch[0]; // e.g. 'farmor'
@@ -2624,15 +3088,48 @@ function runAnalysisCore() {
 
   // ── 6c. Best branch from branch analysis
   var topBranchName = null, topBranchPct = 0;
+  var antradeBranchName = null;
+  var dnaBranchName = null; // gren bekräftad av flest DNA-anträden
+  var branchConflict = false;
   if (state.gedcomA && state.personA) {
-    var bA = getBranches(state.gedcomA, state.personA.id);
+    var bA = (state._branchCache && state._branchCache.branchesA) || getBranches(state.gedcomA, state.personA.id);
     if (bA) {
-      var sA = scoreBranches(bA, state.gedcomB || state.gedcomA, state.matches, state.motherName);
+      var sA = (state._branchCache && state._branchCache.scoresA) || scoreBranches(bA, state.gedcomB || state.gedcomA, state.matches, state.motherName);
       if (sA) {
         var BLABELS = {farfar:'Farfars sida',farmor:'Farmors sida',morfar:'Morfars sida',mormor:'Mormors sida'};
-        Object.entries(sA).forEach(function(e){
+        Object.entries(sA).filter(function(e){ return !e[0].startsWith('_'); }).forEach(function(e){
           if (e[1].pct > topBranchPct) { topBranchPct = e[1].pct; topBranchName = BLABELS[e[0]] || e[0]; }
         });
+
+        // Hitta gren via anträde-bonus
+        if (sA._antradeBranchMatched) {
+          var bonus = sA._antradeBranchBonus || {};
+          var topAntradeBranch = Object.keys(bonus).reduce(function(best, k){
+            return (bonus[k] > (bonus[best]||0)) ? k : best;
+          }, 'farfar');
+          if (bonus[topAntradeBranch] > 0) {
+            antradeBranchName = BLABELS[topAntradeBranch];
+          }
+        }
+
+        // Hitta gren via rå DNA-fördelning (bekräftade anträden)
+        var morM = state.matches.filter(function(m){ return m.side === 'mor'; }).length;
+        var farM = state.matches.filter(function(m){ return m.side === 'far'; }).length;
+        if (farM > morM) dnaBranchName = 'Fars sida';
+        else if (morM > farM) dnaBranchName = 'Mors sida';
+
+        // Konflikt: om grenananalysens toppgren och DNA-bekräftad sida pekar åt varsitt håll
+        if (antradeBranchName && dnaBranchName) {
+          var antradeFar = antradeBranchName.toLowerCase().includes('farfar') || antradeBranchName.toLowerCase().includes('farmor');
+          var dnaFar = dnaBranchName === 'Fars sida';
+          branchConflict = (antradeFar !== dnaFar);
+        }
+
+        // Välj vilken gren att presentera i hypotesen:
+        // DNA-bekräftade anträden > grenananalysens toppgren (som påverkas av geo)
+        if (antradeBranchName) {
+          topBranchName = antradeBranchName; // anträden är starkaste bevis
+        }
       }
     }
   }
@@ -2640,7 +3137,7 @@ function runAnalysisCore() {
   // ── 6d. Best geo places
   var topPlaces = [];
   if (state.gedcomA && state.gedcomB) {
-    var geoR = findGeoOverlap(state.gedcomA, state.gedcomB);
+    var geoR = (state._geoCache) || findGeoOverlap(state.gedcomA, state.gedcomB);
     var placeCounts = {};
     geoR.strong.concat(geoR.weak).forEach(function(h){
       var pl = h.parish || h.place.split(',')[0];
@@ -2733,14 +3230,61 @@ function runAnalysisCore() {
 
   // Main hypothesis
   html += `<div style="font-size:12px;font-weight:700;color:var(--gold);margin:10px 0 5px">💡 Sammantagen hypotes</div>`;
+
+  // Varning om anträdena och rå DNA-fördelning pekar åt varsitt håll
+  if (branchConflict && antradeBranchName && rawDnaBranchName) {
+    html += `<div class="finding warn" style="border-left-color:var(--yellow)">
+      ℹ <strong>Möjlig koppling på flera grenar:</strong>
+      Bekräftade anträden pekar mot <strong>${escH(antradeBranchName)}</strong>.
+      Träffar utan anträde har okänd sida och kan representera en annan gren hos B —
+      dubbelkuslighet (släktskap på både svärds- och spinnsida) är möjligt.
+      Grenananalysen baseras enbart på bekräftade anträden och geo-överlapp.
+    </div>`;
+  }
+
   var hypo = [];
   if (topBranchName && topBranchPct > 30) hypo.push('Grenananalysen pekar mot <strong>' + escH(topBranchName) + '</strong> (' + topBranchPct + '%)');
   if (sortedAncestors.length) {
     var top1 = sortedAncestors[0];
     hypo.push('Den gemensamma anfadern är troligen ett barn till eller nära släkting med <strong>' + escH(top1.text) + '</strong>');
   }
-  if (topPlaces.length) hypo.push('Geografisk tyngdpunkt: <strong>' + escH(topPlaces.join(', ')) + '</strong>');
-  if (estBirthRange) hypo.push('Sök person född ca <strong>' + estBirthRange + '</strong> i dessa trakter');
+  // Sök-orten baseras på anträdenas anor, inte geo-träffarna mot B
+  if (estBirthRange) {
+    // Hämta orter från matchade anor i anträdena om möjligt
+    var antradeOrts = [];
+    if (state._branchCache && state._branchCache.branchesA && state.personA) {
+      var topBranchKey = antradeBranchName ? (antradeBranchName.toLowerCase().includes('farfar') ? 'farfar' : antradeBranchName.toLowerCase().includes('farmor') ? 'farmor' : antradeBranchName.toLowerCase().includes('morfar') ? 'morfar' : 'mormor') : null;
+      if (topBranchKey && state._branchCache.branchesA[topBranchKey]) {
+        var matchedSurnames = new Set();
+        state.matches.forEach(function(m) {
+          if (!m.antrade) return;
+          var brackets = m.antrade.match(/\[([^\]]+)\]/g) || [];
+          brackets.forEach(function(b) {
+            var inner = b.slice(1,-1).trim();
+            var yr = inner.match(/(\d{4})/);
+            if (!yr) return;
+            var nm = inner.replace(/\d{4}[\u2013\-]\d{0,4}/g,'').replace(/\d{4}/g,'').trim().toLowerCase();
+            var words = nm.split(/\s+/).filter(function(w){return w.length>2;});
+            if (words.length > 0) matchedSurnames.add(words[words.length-1] + '|' + yr[1]);
+          });
+        });
+        state._branchCache.branchesA[topBranchKey].forEach(function(p) {
+          if (!p.bornPlace) return;
+          var sn = (p.surname||'').toLowerCase();
+          var yr = p.born ? String(parseInt(p.born)) : '';
+          if (matchedSurnames.has(sn + '|' + yr)) {
+            var ort = p.bornPlace.split(',')[0].trim();
+            if (ort && !antradeOrts.includes(ort)) antradeOrts.push(ort);
+          }
+        });
+      }
+    }
+    var ortText = antradeOrts.length > 0
+      ? 'Sök person född ca <strong>' + estBirthRange + '</strong> — troligen i trakterna: <strong>' + escH(antradeOrts.slice(0,4).join(', ')) + '</strong> (baserat på anträdenas anor)'
+      : 'Sök person född ca <strong>' + estBirthRange + '</strong>';
+    hypo.push(ortText);
+  }
+  if (topPlaces.length) hypo.push('Geografiska överlapp mot B:s träd (kan peka mot den okände anfadern på B:s sida): <strong>' + escH(topPlaces.join(', ')) + '</strong> — dessa orter hör inte nödvändigtvis till ovan nämnda gren');
   if (triGroups.length) {
     var chrList = [...new Set(triGroups.map(function(g){return g.chr;}))].join(', ');
     hypo.push('Triangulering på kromosom ' + escH(String(chrList)) + ' bekräftar att flera träffar delar samma gren');
@@ -2784,7 +3328,7 @@ function runAnalysisCore() {
   if (summPB) parts.push(escH(nameB) + ' identifierad som <strong>' + escH(summPB.name) + '</strong> (' + (summPB.side === 'mor' ? 'mors' : summPB.side === 'far' ? 'fars' : 'okänd') + ' sida)');
 
   if (state.gedcomA && state.gedcomB) {
-    var summGeo = findGeoOverlap(state.gedcomA, state.gedcomB);
+    var summGeo = (state._geoCache) || findGeoOverlap(state.gedcomA, state.gedcomB);
     var allGeoHits = summGeo.strong.concat(summGeo.weak);
     if (allGeoHits.length) {
       var byPlace2 = {};
@@ -2843,7 +3387,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v0.9.43';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.0.08';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -2879,9 +3423,9 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v0.9.43</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.0.08</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v0.9.43 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v1.0.08 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
   const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
@@ -2901,7 +3445,7 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v0.9.43\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.0.08\n${'='.repeat(50)}\n\n` + tmp.innerText;
   const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
   const chosenTxt = prompt('Exportera som text:', suggestedTxt);
   if (chosenTxt === null) return;
@@ -3062,6 +3606,531 @@ function updateSessionMeta(data) {
 }
 
 // ═══════════════════════════════════════════════
+// AI-CHATT
+// ═══════════════════════════════════════════════
+
+const CHAT_PROVIDERS = {
+  anthropic: {
+    label: 'Anthropic (Claude)',
+    model: 'claude-sonnet-4-6',
+    placeholder: 'sk-ant-…',
+    keyPrefix: 'sk-',
+    infoUrl: 'https://console.anthropic.com',
+    infoLabel: 'console.anthropic.com → API Keys',
+    free: false,
+    note: 'Pay-as-you-go · ca 0,5 öre/fråga'
+  },
+  gemini: {
+    label: 'Google Gemini (gratis)',
+    model: 'gemini-3.6-flash',
+    placeholder: 'AIza…',
+    keyPrefix: 'AIza',
+    infoUrl: 'https://aistudio.google.com/app/apikey',
+    infoLabel: 'aistudio.google.com → Get API Key',
+    free: true,
+    note: 'Gratis upp till 15 förfrågningar/minut'
+  },
+  groq: {
+    label: 'Groq (gratis)',
+    model: 'llama-3.3-70b-versatile',
+    placeholder: 'gsk_…',
+    keyPrefix: 'gsk_',
+    infoUrl: 'https://console.groq.com/keys',
+    infoLabel: 'console.groq.com → API Keys',
+    free: true,
+    note: 'Gratis · snabb · Llama 3.3 70B'
+  }
+};
+
+const chatState = {
+  history: [],
+  provider: sessionStorage.getItem('dna_chat_provider') || 'gemini',
+  apiKey: sessionStorage.getItem('dna_chat_apikey') || ''
+};
+
+// Bygg systemkontext från aktuell state + senaste analysresultat
+function buildChatContext() {
+  const lines = [];
+  lines.push('Du är en genealogi-assistent som hjälper användaren att tolka och följa upp en DNA-släktskapsanalys.');
+  lines.push('Svara alltid på svenska. Var konkret och fokusera på det genealogiska problemet.');
+  lines.push('Undvik generella råd om DNA-forskning som inte är kopplade till den specifika analysen nedan.');
+  lines.push('VIKTIGT: Skriv alltid KOMPLETTA svar. Avsluta aldrig mitt i en mening eller ett stycke.');
+  lines.push('');
+
+  // --- Person A & B ---
+  const nA = document.getElementById('nameA')?.value || state.personA?.name || 'okänd';
+  const nB = document.getElementById('nameB')?.value || state.personB?.name || 'okänd';
+  lines.push('=== ANALYS-KONTEXT ===');
+  lines.push(`Person A: ${nA}${state.personA?.born ? ' f. '+state.personA.born : ''}`);
+  lines.push(`Person B: ${nB}${state.personB?.born ? ' f. '+state.personB.born : ''}`);
+  lines.push(`Antal gemensamma DNA-träffar: ${state.matches.length}`);
+
+  // --- A↔B DNA-värden ---
+  const abCm = document.getElementById('ab_cm')?.value;
+  const abSeg = document.getElementById('ab_seg')?.value;
+  const abLongest = document.getElementById('ab_longest')?.value;
+  if (abCm) {
+    let abStr = `DNA A↔B: ${abCm} cM`;
+    if (abSeg) abStr += `, ${abSeg} segment`;
+    if (abLongest) abStr += `, längsta segment ${abLongest} cM`;
+    lines.push(abStr);
+  }
+
+  // --- GEDCOM-info ---
+  if (state.gedcomA) {
+    lines.push(`GEDCOM A: INLÄST — ${state.gedcomA.length} personer`);
+  } else {
+    lines.push('GEDCOM A: EJ INLÄST');
+  }
+  if (state.gedcomB) {
+    lines.push(`GEDCOM B: INLÄST — ${state.gedcomB.length} personer`);
+  } else {
+    lines.push('GEDCOM B: EJ INLÄST');
+  }
+  lines.push('OBS: Ovanstående GEDCOM-status är aktuell och korrekt. Ignorera eventuella "undefined"-referenser i analysrapporten nedan.');
+
+  // --- Testpersoner ---
+  if (state.testers && state.testers.length > 0) {
+    lines.push('');
+    lines.push('Testpersoner och kända grenar:');
+    state.testers.forEach(function(t) {
+      const BLABELS = {farfar:'Farfars sida',farmor:'Farmors sida',morfar:'Morfars sida',mormor:'Mormors sida',
+        farmors_far:'Farmors farsida',farmors_mor:'Farmors morsida',mormors_far:'Mormors farsida',mormors_mor:'Mormors morsida',
+        mor:'Mors sida',far:'Fars sida'};
+      lines.push(`  • ${t.name}: ${BLABELS[t.branch] || t.branch || 'okänd gren'}${t.note ? ' ('+t.note+')' : ''}`);
+    });
+  }
+
+  // --- Träffar uppdelade i kategorier ---
+  if (state.matches.length > 0) {
+    const _isChildOfA = function(m) {
+      if (!m.relA) return false;
+      var r = m.relA.toLowerCase().trim();
+      return ['dotter','son','barnbarn','barn','granddaughter','grandson','grandchild','child','daughter'].some(function(w){ return r.includes(w); });
+    };
+    const sideLabelMap = {far:'Fars sida', mor:'Mors sida', both:'Båda sidor', okänd:'Okänd sida'};
+
+    // Barn till A — egna kategorin
+    const childrenOfA = state.matches.filter(function(m){ return _isChildOfA(m); });
+    if (childrenOfA.length > 0) {
+      lines.push('');
+      lines.push('Barn till A (egna testpersoner):');
+      childrenOfA.forEach(function(m) {
+        const cm = m.cm ? m.cm + ' cM' : 'cM okänt';
+        const rel = m.relA || '';
+        lines.push(`  • ${m.name} — ${cm}${rel ? ' ('+rel+')' : ''}`);
+      });
+    }
+
+    // Testpersoner med känd gren — visa cM mot B
+    if (state.testers && state.testers.length > 0) {
+      lines.push('');
+      lines.push('Testpersoner och kända grenar (med cM mot B om tillgängligt):');
+      const BLABELS = {farfar:'Farfars sida',farmor:'Farmors sida',morfar:'Morfars sida',mormor:'Mormors sida',
+        farmors_far:'Farmors farsida',farmors_mor:'Farmors morsida',mormors_far:'Mormors farsida',mormors_mor:'Mormors morsida',
+        mor:'Mors sida',far:'Fars sida'};
+      state.testers.forEach(function(t) {
+        const matchForTester = state.matches.find(function(m){
+          return m.name && m.name.toLowerCase().includes(t.name.toLowerCase());
+        });
+        const cmFromMatch = matchForTester && matchForTester.cm ? matchForTester.cm : null;
+        const cmB = t.cmB != null ? t.cmB : cmFromMatch;
+        const cmStr = cmB != null ? ` — ${cmB} cM mot B` : ' — cM mot B okänt';
+        lines.push(`  • ${t.name}: ${BLABELS[t.branch] || t.branch || 'okänd gren'}${cmStr}${t.note ? ' ('+t.note+')' : ''}`);
+      });
+    }
+
+    // Övriga träffar — fars/mors/okänd sida
+    const otherMatches = state.matches.filter(function(m){ return !_isChildOfA(m); });
+    const farMatches = otherMatches.filter(function(m){ return m.side === 'far'; });
+    const morMatches = otherMatches.filter(function(m){ return m.side === 'mor'; });
+    const unknownMatches = otherMatches.filter(function(m){ return !m.side || m.side === 'both'; });
+
+    if (farMatches.length > 0) {
+      lines.push('');
+      lines.push('Träffar — Fars sida (' + farMatches.length + ' st):');
+      farMatches.forEach(function(m) {
+        const cm = m.cm ? m.cm + ' cM' : '';
+        let row = `  • ${m.name}${cm ? ' — '+cm : ''}`;
+        if (m.antrade && m.antrade.trim()) row += `\n    Anträde: ${m.antrade.trim()}`;
+        lines.push(row);
+      });
+    }
+    if (morMatches.length > 0) {
+      lines.push('');
+      lines.push('Träffar — Mors sida (' + morMatches.length + ' st):');
+      morMatches.forEach(function(m) {
+        const cm = m.cm ? m.cm + ' cM' : '';
+        let row = `  • ${m.name}${cm ? ' — '+cm : ''}`;
+        if (m.antrade && m.antrade.trim()) row += `\n    Anträde: ${m.antrade.trim()}`;
+        lines.push(row);
+      });
+    }
+    if (unknownMatches.length > 0) {
+      lines.push('');
+      lines.push('Träffar — Okänd sida (' + unknownMatches.length + ' st):');
+      unknownMatches.forEach(function(m) {
+        const cm = m.cm ? m.cm + ' cM' : '';
+        let row = `  • ${m.name}${cm ? ' — '+cm : ''}`;
+        if (m.antrade && m.antrade.trim()) row += `\n    Anträde: ${m.antrade.trim()}`;
+        lines.push(row);
+      });
+    }
+  }
+
+  // --- Grenananalys (från cache) ---
+  if (state._branchCache && state._branchCache.scoresA) {
+    const sA = state._branchCache.scoresA;
+    const BLABELS = {farfar:'Farfars sida',farmor:'Farmors sida',morfar:'Morfars sida',mormor:'Mormors sida'};
+    lines.push('');
+    lines.push('Grenananalys (procentuell fördelning):');
+    Object.entries(sA).filter(function(e){ return !e[0].startsWith('_'); }).forEach(function(e) {
+      lines.push(`  ${BLABELS[e[0]] || e[0]}: ${e[1].pct}%  (${e[1].score} poäng)`);
+    });
+  }
+
+  // --- Analysrapporten som text (rensat HTML) ---
+  const outputEl = document.getElementById('analysisOutput');
+  if (outputEl && outputEl.innerText && outputEl.innerText.length > 100) {
+    const reportText = outputEl.innerText.replace(/\n{3,}/g, '\n\n').trim();
+    lines.push('');
+    lines.push('=== FULLSTÄNDIG ANALYSRAPPORT ===');
+    // Begränsa till ~4000 tecken för att hålla kontext rimlig
+    const maxLen = 4000;
+    if (reportText.length > maxLen) {
+      lines.push(reportText.slice(0, maxLen) + '\n[…rapport fortsätter, trunkerad för kontextlängd]');
+    } else {
+      lines.push(reportText);
+    }
+  } else {
+    lines.push('');
+    lines.push('Obs: Ingen analys har körts än. Uppmana användaren att köra analysen först för bättre svar.');
+  }
+
+  return lines.join('\n');
+}
+
+function chatRefreshContext() {
+  const badge = document.getElementById('chat-context-info');
+  const badgeText = document.getElementById('chat-context-text');
+  if (!badge || !badgeText) return;
+  const hasAnalysis = document.getElementById('analysisOutput')?.innerText?.length > 100;
+  const nMatches = state.matches.length;
+  if (nMatches > 0 || hasAnalysis) {
+    badge.style.display = 'inline-flex';
+    let parts = [];
+    if (nMatches > 0) parts.push(nMatches + ' träffar');
+    if (state.gedcomA) parts.push('GEDCOM A');
+    if (state.gedcomB) parts.push('GEDCOM B');
+    if (hasAnalysis) parts.push('analys körd');
+    badgeText.textContent = 'Kontext: ' + parts.join(' · ');
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function chatKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    chatSend();
+  }
+}
+
+function chatSuggest(text) {
+  const inp = document.getElementById('chat-input');
+  if (inp) { inp.value = text; inp.focus(); }
+}
+
+function chatSetProvider(val) {
+  if (!CHAT_PROVIDERS[val]) val = 'gemini';
+  chatState.provider = val;
+  sessionStorage.setItem('dna_chat_provider', val);
+  // Synka dropdown
+  const sel = document.getElementById('chat-provider-select');
+  if (sel) sel.value = val;
+  // Återställ nyckel för denna leverantör
+  const saved = sessionStorage.getItem('dna_chat_apikey_' + val) || '';
+  chatState.apiKey = saved;
+  const inp = document.getElementById('chat-api-key');
+  const prov = CHAT_PROVIDERS[val];
+  if (inp) {
+    inp.value = saved;
+    inp.placeholder = prov ? prov.placeholder : '';
+    inp.type = 'password';
+  }
+  // Uppdatera info-länk
+  const infoEl = document.getElementById('chat-provider-info');
+  if (infoEl && prov) {
+    infoEl.innerHTML = (prov.free ? '🟢 ' : '💳 ') + escH(prov.note) +
+      ' · <a href="' + escH(prov.infoUrl) + '" target="_blank" style="color:var(--accent2)">' + escH(prov.infoLabel) + '</a>';
+  }
+  chatUpdateApiStatus(saved ? '✓ Nyckel laddad.' : 'Ange API-nyckel för ' + (prov ? prov.label : val) + '.', saved ? 'var(--green)' : 'var(--muted)');
+}
+
+function chatUpdateApiStatus(msg, color) {
+  const el = document.getElementById('chat-api-status');
+  if (el) { el.textContent = msg; el.style.color = color || 'var(--muted)'; }
+}
+
+function chatSaveApiKey() {
+  const val = document.getElementById('chat-api-key')?.value || '';
+  chatState.apiKey = val;
+  sessionStorage.setItem('dna_chat_apikey', val);
+  sessionStorage.setItem('dna_chat_apikey_' + chatState.provider, val);
+  chatUpdateApiStatus(val ? '✓ Nyckel sparad i denna session.' : 'Nyckeln sparas i denna webbläsarsession.', val ? 'var(--green)' : 'var(--muted)');
+}
+
+function chatToggleKeyVisible() {
+  const inp = document.getElementById('chat-api-key');
+  if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+function chatClearApiKey() {
+  chatState.apiKey = '';
+  sessionStorage.removeItem('dna_chat_apikey');
+  sessionStorage.removeItem('dna_chat_apikey_' + chatState.provider);
+  const inp = document.getElementById('chat-api-key');
+  if (inp) { inp.value = ''; inp.type = 'password'; }
+  chatUpdateApiStatus('Nyckel rensad.', 'var(--yellow)');
+}
+
+function chatRenderMarkdown(text) {
+  // Escape HTML först
+  let s = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Rubriker ### ## #
+  s = s.replace(/^### (.+)$/gm, '<strong style="color:var(--accent2);font-size:13px">$1</strong>');
+  s = s.replace(/^## (.+)$/gm,  '<strong style="color:var(--accent2);font-size:14px">$1</strong>');
+  s = s.replace(/^# (.+)$/gm,   '<strong style="color:var(--accent2);font-size:15px">$1</strong>');
+  // Bold **text**
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic *text*
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Horisontell linje ---
+  s = s.replace(/^---+$/gm, '<hr style="border-color:var(--border);margin:6px 0">');
+  // Numrerade listor
+  s = s.replace(/^\d+\.\s+(.+)$/gm, '<div style="padding-left:12px;margin:2px 0">• $1</div>');
+  // Streck-listor
+  s = s.replace(/^[-–]\s+(.+)$/gm, '<div style="padding-left:12px;margin:2px 0">• $1</div>');
+  // Radbrytningar
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+function chatAddMessage(role, text) {
+  const wrap = document.getElementById('chat-messages');
+  if (!wrap) return;
+  const notes = wrap.querySelectorAll('.system-note');
+  notes.forEach(function(n) { if (n.textContent.includes('Kör analysen')) n.remove(); });
+
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + role;
+  if (role === 'assistant') {
+    div.innerHTML = chatRenderMarkdown(text);
+  } else {
+    div.textContent = text;
+  }
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+function chatShowTyping() {
+  const wrap = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-typing';
+  div.id = 'chat-typing-indicator';
+  div.textContent = 'AI-assistenten skriver…';
+  wrap.appendChild(div);
+  wrap.scrollTop = wrap.scrollHeight;
+  return div;
+}
+
+function chatHideTyping() {
+  const el = document.getElementById('chat-typing-indicator');
+  if (el) el.remove();
+}
+
+async function chatSend() {
+  const inp = document.getElementById('chat-input');
+  const text = (inp?.value || '').trim();
+  if (!text) return;
+
+  const apiKey = chatState.apiKey || document.getElementById('chat-api-key')?.value || '';
+  const prov = CHAT_PROVIDERS[chatState.provider] || CHAT_PROVIDERS.anthropic;
+
+  if (!apiKey) {
+    chatAddMessage('system-note', '⚠ Ange en API-nyckel för ' + prov.label + ' ovan.');
+    return;
+  }
+
+  inp.value = '';
+  inp.style.height = '';
+  chatAddMessage('user', text);
+  chatState.history.push({ role: 'user', content: text });
+
+  const btn = document.getElementById('chat-send-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  chatShowTyping();
+
+  try {
+    const systemPrompt = buildChatContext();
+    const historySlice = chatState.history.slice(-10);
+    let reply = '';
+
+    if (chatState.provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: prov.model,
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages: historySlice
+        })
+      });
+      chatHideTyping();
+      if (!res.ok) { const e = await res.json().catch(()=>{}); throw new Error('API-fel ' + res.status + (e?.error?.message ? ' — ' + e.error.message : '')); }
+      const data = await res.json();
+      reply = data.content?.map(function(c){ return c.type==='text'?c.text:''; }).filter(Boolean).join('\n') || '(tomt svar)';
+
+    } else if (chatState.provider === 'gemini') {
+      // Gemini: system ingår som första user-turn med role=user + model-svar
+      const geminiMessages = [
+        { role: 'user', parts: [{ text: 'SYSTEMINSTRUKTION:\n' + systemPrompt + '\n\nOK, förstått. Jag är redo att hjälpa.' }] },
+        { role: 'model', parts: [{ text: 'Förstått. Jag är din genealogi-assistent och har tagit del av analysen.' }] },
+        ...historySlice.map(function(m) {
+          return { role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] };
+        })
+      ];
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/' + prov.model + ':generateContent?key=' + encodeURIComponent(apiKey),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: geminiMessages, generationConfig: { maxOutputTokens: 4000, temperature: 0.7 } })
+        }
+      );
+      chatHideTyping();
+      if (!res.ok) { const e = await res.json().catch(()=>{}); throw new Error('Gemini-fel ' + res.status + (e?.error?.message ? ' — ' + e.error.message : '')); }
+      const data = await res.json();
+      // Samla text från alla candidates och alla parts
+      if (data.candidates && data.candidates.length > 0) {
+        reply = data.candidates.map(function(c) {
+          return (c.content?.parts || []).map(function(p){ return p.text || ''; }).join('');
+        }).join('');
+      }
+      if (!reply) {
+        // Visa ev. blockorsak om svaret är tomt
+        const reason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason || 'tomt svar';
+        reply = '(Inget svar från Gemini — ' + reason + ')';
+      }
+
+    } else if (chatState.provider === 'groq') {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey
+        },
+        body: JSON.stringify({
+          model: prov.model,
+          max_tokens: 1000,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...historySlice
+          ]
+        })
+      });
+      chatHideTyping();
+      if (!res.ok) { const e = await res.json().catch(()=>{}); throw new Error('Groq-fel ' + res.status + (e?.error?.message ? ' — ' + e.error.message : '')); }
+      const data = await res.json();
+      reply = data.choices?.[0]?.message?.content || '(tomt svar)';
+    }
+
+    chatState.history.push({ role: 'assistant', content: reply });
+    chatAddMessage('assistant', reply);
+
+  } catch(err) {
+    chatHideTyping();
+    chatAddMessage('system-note', '⚠ ' + (err.message || 'Okänt fel'));
+    chatState.history.pop();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Skicka ↵'; }
+  }
+}
+
+function chatAddToReport() {
+  if (!chatState.history.length) {
+    chatAddMessage('system-note', '⚠ Ingen dialog att lägga till — starta en konversation först.');
+    return;
+  }
+
+  const outputEl = document.getElementById('analysisOutput');
+  if (!outputEl || outputEl.querySelector('.empty')) {
+    chatAddMessage('system-note', '⚠ Kör analysen först (knappen Kör analys) så att rapporten finns att lägga till i.');
+    return;
+  }
+
+  // Ta bort eventuellt befintligt AI-dialog-avsnitt
+  const existing = outputEl.querySelector('#chat-report-section');
+  if (existing) existing.remove();
+
+  // Bygg avsnittet
+  const provLabel = CHAT_PROVIDERS[chatState.provider]?.label || chatState.provider;
+  const timestamp = new Date().toLocaleString('sv-SE');
+
+  let dialogHtml = '';
+  chatState.history.forEach(function(msg) {
+    if (msg.role === 'user') {
+      dialogHtml += `
+        <div style="margin:10px 0 4px">
+          <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">❓ Fråga</span>
+          <div class="finding" style="border-left-color:var(--bg3);background:rgba(15,52,96,0.3);margin-top:4px;white-space:pre-wrap">${escH(msg.content)}</div>
+        </div>`;
+    } else {
+      dialogHtml += `
+        <div style="margin:4px 0 12px">
+          <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">🤖 ${escH(provLabel)}</span>
+          <div class="finding good" style="margin-top:4px">${chatRenderMarkdown(msg.content)}</div>
+        </div>`;
+    }
+  });
+
+  const section = document.createElement('div');
+  section.id = 'chat-report-section';
+  section.className = 'analysis-block';
+  section.style.borderColor = 'var(--accent2)';
+  section.innerHTML = `
+    <h3>🤖 7. AI-dialog — ${escH(provLabel)}</h3>
+    <div class="analysis-result">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Exporterad: ${escH(timestamp)} · ${chatState.history.filter(function(m){return m.role==='user';}).length} frågor</div>
+      ${dialogHtml}
+    </div>`;
+
+  // Lägg till sist i rapporten (inuti .card om den finns, annars direkt)
+  const card = outputEl.querySelector('.card');
+  if (card) card.appendChild(section);
+  else outputEl.appendChild(section);
+
+  // Bekräfta och navigera till rapporten
+  chatAddMessage('system-note', '✓ AI-dialogen har lagts till i analysrapporten (avsnitt 7).');
+  setTimeout(function() { App.showTab('analys'); }, 800);
+}
+
+function chatClear() {
+  chatState.history = [];
+  const wrap = document.getElementById('chat-messages');
+  if (wrap) {
+    wrap.innerHTML = '<div class="chat-msg system-note">Kör analysen och skriv din fråga — AI:n har tillgång till hela rapporten.</div>';
+  }
+}
+
+// ═══════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════
 function escH(s) {
@@ -3112,6 +4181,16 @@ App.cleanTesterNames     = cleanTesterNames;
 App.removeTesterBranch   = removeTesterBranch;
 App.renderTesterBranchList = renderTesterBranchList;
 
+App.chatSend            = chatSend;
+App.chatKeyDown         = chatKeyDown;
+App.chatSuggest         = chatSuggest;
+App.chatSaveApiKey      = chatSaveApiKey;
+App.chatToggleKeyVisible= chatToggleKeyVisible;
+App.chatClearApiKey     = chatClearApiKey;
+App.chatClear           = chatClear;
+App.chatRefreshContext  = chatRefreshContext;
+App.chatAddToReport     = chatAddToReport;
+
 // INIT — after all functions and App bindings are defined
 // Script is at end of body — DOM is ready, call directly
 state.triGedcomAll = [];
@@ -3131,6 +4210,14 @@ document.addEventListener('click', function(e) {
 
 renderMatchList();
 updateSessionMeta();
+
+// Återställ sparad leverantör — rensa felaktig anthropic-default om den sitter i sessionStorage
+setTimeout(function() {
+  var stored = sessionStorage.getItem('dna_chat_provider');
+  // Om inget är sparat sedan tidigare, sätt gemini
+  var savedProvider = (stored && CHAT_PROVIDERS[stored]) ? stored : 'gemini';
+  chatSetProvider(savedProvider);
+}, 0);
 </script>
 </body>
 </html>
