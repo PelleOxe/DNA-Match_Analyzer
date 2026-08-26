@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v1.0.24</title>
+<title>DNA-Match Analyzer v1.0.34</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -421,7 +421,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v1.0.24</div>
+      <div class="app-version">v1.0.34</div>
     </div>
   </div>
   <div class="header-actions">
@@ -761,7 +761,7 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 1.0.24<br>
+      <strong>Version:</strong> 1.0.34<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
       <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · FamilyTreeDNA CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
@@ -895,7 +895,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '1.0.24'
+  version: '1.0.34'
 };
 
 // Global namespace — filled at end of script
@@ -3472,7 +3472,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.0.24';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.0.34';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -3508,9 +3508,9 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.0.24</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.0.34</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v1.0.24 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v1.0.34 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
   const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
@@ -3530,7 +3530,7 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.0.24\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.0.34\n${'='.repeat(50)}\n\n` + tmp.innerText;
   const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
   const chosenTxt = prompt('Exportera som text:', suggestedTxt);
   if (chosenTxt === null) return;
@@ -4371,20 +4371,27 @@ function renderChromosomeMap() {
 
   function gedcomLabel(name) {
     var nameLc = name.toLowerCase().replace(/[*†°\(\)]/g,'').trim();
-    var nameWords = nameLc.split(/\s+/).filter(function(w){ return w.length > 1; });
+    var nameWords = nameLc.split(/\s+/).filter(function(w){ return w.length > 1 && !/^\d/.test(w); });
     if (nameWords.length < 2) return null;
     var first = nameWords[0];
     var last  = nameWords[nameWords.length - 1];
 
     function matchesGed(persons) {
       return persons.some(function(p) {
+        // Använd p.given och p.surname om de finns
+        var given   = (p.given   || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
+        var surname = (p.surname || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
+        if (given && surname) {
+          var gFirst = given.split(/\s+/)[0];
+          var sWords = surname.split(/\s+/);
+          return gFirst === first && sWords.indexOf(last) >= 0;
+        }
+        // Fallback: p.name
         var pn = (p.name || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
         if (!pn) return false;
-        var pWords = pn.split(/\s+/).filter(function(w){ return w.length > 1; });
-        // Kräv exakt match på förnamn (pWords[0]) och efternamn
-        var pFirst = pWords[0] || '';
-        var pLast  = pWords[pWords.length - 1] || '';
-        return pFirst === first && pLast === last;
+        var pWords = pn.split(/\s+/).filter(function(w){ return w.length > 1 && !/^\d/.test(w); });
+        if (pWords.length < 2) return false;
+        return pWords[0] === first && pWords.indexOf(last) >= 0;
       });
     }
 
@@ -4392,41 +4399,39 @@ function renderChromosomeMap() {
     var gedB = gedPersons(state.gedcomB);
     if (matchesGed(gedB)) return 'B';
     if (matchesGed(gedA)) return 'A';
+
+    // Kolla om personen nämns i sitt eget anträde som sista led (= testperson till A)
+    var ownMx = state.matches.find(function(x){ return x.name === name; });
+    if (ownMx && ownMx.antrade) {
+      var parts = ownMx.antrade.trim().split(/\s*\/\s*/);
+      var lastPart = parts[parts.length-1].replace(/\[|\]/g,'').toLowerCase().trim();
+      if (first && lastPart.startsWith(first)) return 'A';
+    }
+
+    // Barn till A via relA
+    if (ownMx && ownMx.relA && /dotter|son|barn|child|daughter/i.test(ownMx.relA)) return 'A';
     return null;
   }
 
-  // Hämta anträde för en person — för testpersoner (Carina, Per) via state.testers
   function getAntrade(name) {
-    var m = state.matches.find(function(x){ return x.name === name; });
-    if (m && m.antrade && m.antrade.trim()) return m.antrade.trim();
+    var mx = state.matches.find(function(x){ return x.name === name; });
+    if (mx && mx.antrade && mx.antrade.trim()) return mx.antrade.trim();
 
-    // Kolla om personen är testperson — sök bland matches efter en som har denna person som tester
-    var nameLc = name.toLowerCase();
-    var firstWord = nameLc.split(/\s+/)[0];
+    // Blockera Person B
+    var nB = ((state.personB && state.personB.name) || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
+    var nameLc = name.toLowerCase().replace(/[*†°\(\)]/g,'').trim();
+    if (nB && nameLc.startsWith(nB.split(/\s+/)[0])) return '';
 
-    // Debug för Per/Carina
-    if (/^(per|carina)/i.test(name)) {
-      var testerNames = [];
-      state.matches.forEach(function(mx){
-        (mx.testers||[]).forEach(function(t){ if(testerNames.indexOf(t.name)<0) testerNames.push(t.name); });
-      });
-      console.log('TESTER-NAMN i matches:', JSON.stringify(testerNames));
-      console.log('state.testers:', JSON.stringify(state.testers.map(function(t){ return t.name; })));
+    // Om personen är barn till A → returnera inget anträde
+    // (de kan läggas in manuellt i trianguleringsfliken)
+    if (mx && mx.relA && /dotter|son|barn|child|daughter/i.test(mx.relA)) {
+      return '';
     }
 
-    var fromTester = null;
-    state.matches.forEach(function(mx) {
-      if (fromTester) return;
-      if ((mx.testers||[]).some(function(t){
-        return t.name && t.name.toLowerCase().includes(firstWord);
-      })) {
-        if (mx.antrade && mx.antrade.trim()) fromTester = mx.antrade.trim();
-      }
-    });
-    return fromTester || '';
+    return '';
   }
 
-  // Plocka ut det gemensamma anparet ur anträdes-strängen
+    // Plocka ut det gemensamma anparet ur anträdes-strängen
   function extractCommonAncestors(antrade) {
     if (!antrade) return '';
     var brackets = antrade.match(/\[([^\]]+)\]/g) || [];
