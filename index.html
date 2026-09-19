@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v1.0.34</title>
+<title>DNA-Match Analyzer v1.1.02</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -411,6 +411,24 @@
   .csv-loaded-list { font-size: 12px; color: var(--muted); margin-top: 8px; }
   .overlap-alert { background: rgba(201,168,76,0.1); border: 1px solid var(--gold); border-radius: 5px; padding: 8px 12px; font-size: 12px; margin: 4px 0; color: var(--gold); }
 
+  /* GEDCOM-JÄMFÖRELSE */
+  .gedmatch-pair { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
+  .gedmatch-pair.conf-high { border-left: 3px solid var(--green); }
+  .gedmatch-pair.conf-medium { border-left: 3px solid var(--yellow); }
+  .gedmatch-pair.conf-low { border-left: 3px solid var(--muted); }
+  .gedmatch-person { font-size: 13px; }
+  .gedmatch-name { font-weight: 700; color: var(--text); }
+  .gedmatch-detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .gedmatch-arrow { font-size: 18px; color: var(--muted); text-align: center; }
+  .gedmatch-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; margin-top: 4px; }
+  .gedmatch-badge.high { background: rgba(76,175,125,0.2); color: var(--green); border: 1px solid var(--green); }
+  .gedmatch-badge.medium { background: rgba(240,192,64,0.15); color: var(--yellow); border: 1px solid var(--yellow); }
+  .gedmatch-badge.low { background: rgba(136,136,170,0.15); color: var(--muted); border: 1px solid var(--muted); }
+  .gedmatch-reasons { font-size: 11px; color: var(--muted); margin-top: 6px; grid-column: 1 / -1; }
+  .gedmatch-reason-tag { display: inline-block; background: var(--bg3); border-radius: 4px; padding: 1px 7px; margin: 2px 2px 0 0; color: var(--accent2); font-size: 11px; }
+  .gedmatch-filter-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .gedmatch-stats { font-size: 12px; color: var(--muted); padding: 6px 0; }
+  .gedmatch-section-hdr { font-size: 12px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.6px; margin: 18px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
 
 </style>
 </head>
@@ -421,7 +439,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v1.0.34</div>
+      <div class="app-version">v1.1.02</div>
     </div>
   </div>
   <div class="header-actions">
@@ -761,7 +779,7 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 1.0.34<br>
+      <strong>Version:</strong> 1.1.02<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
       <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · FamilyTreeDNA CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
@@ -895,7 +913,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '1.0.34'
+  version: '1.1.02'
 };
 
 // Global namespace — filled at end of script
@@ -2829,8 +2847,59 @@ function runAnalysisCore() {
   console.log('[DNA] Cache-fas klar, bygger HTML...');
   let html = `<div class="card"><div class="card-title">🔍 Analysresultat — ${escH(nameA)} ↔ ${escH(nameB)}</div>`;
 
-  // ── 1. RELATIONSUPPSKATTNING ──
-  html += `<div class="analysis-block"><h3>📊 1. Relationsuppskattning</h3><div class="analysis-result">`;
+  // ── 1. GEDCOM-JÄMFÖRELSE ──
+  if (state.gedcomA && state.gedcomB) {
+    html += `<div class="analysis-block"><h3>🔀 1. GEDCOM-jämförelse — gemensamma personer?</h3><div class="analysis-result">`;
+    const gedResults = runGedcompAnalysis();
+    state._gedcompResults = gedResults; // cache för ev. återanvändning
+    if (!gedResults.length) {
+      html += `<div class="finding">Inga kandidater hittades med tillräcklig likhet mellan A:s och B:s GEDCOM-träd.</div>`;
+    } else {
+      const highN   = gedResults.filter(r => r.conf === 'high').length;
+      const mediumN = gedResults.filter(r => r.conf === 'medium').length;
+      const lowN    = gedResults.filter(r => r.conf === 'low').length;
+      html += `<div class="finding good"><strong>${gedResults.length} kandidatpar</strong> hittade — `
+        + (highN   ? `<span class="tag tag-green">${highN} hög</span> ` : '')
+        + (mediumN ? `<span class="tag tag-yellow">${mediumN} medel</span> ` : '')
+        + (lowN    ? `<span class="tag">${lowN} låg</span>` : '')
+        + `</div>`;
+      // Visa hög-konfidenspar detaljerat, medel/låg komprimerat
+      const highPairs = gedResults.filter(r => r.conf === 'high');
+      const medPairs  = gedResults.filter(r => r.conf === 'medium');
+      const lowPairs  = gedResults.filter(r => r.conf === 'low');
+      if (highPairs.length) {
+        html += `<div style="font-size:12px;font-weight:700;color:var(--green);margin:10px 0 6px">🟢 Hög konfidensˢ — sannolikt samma person:</div>`;
+        highPairs.slice(0, 20).forEach(r => {
+          const bA = r.pA.born ? ' f.' + r.pA.born : '';
+          const bB = r.pB.born ? ' f.' + r.pB.born : '';
+          const plA = r.pA.bornPlace ? ' · ' + r.pA.bornPlace.split(',')[0] : '';
+          const plB = r.pB.bornPlace ? ' · ' + r.pB.bornPlace.split(',')[0] : '';
+          const tags = r.reasons.map(rs => `<span class="tag">${escH(rs)}</span>`).join(' ');
+          html += `<div class="finding good" style="margin-bottom:6px">
+            <strong>${escH(r.pA.name)}${escH(bA)}${escH(plA)}</strong> <span style="color:var(--muted)">⟷</span> <strong>${escH(r.pB.name)}${escH(bB)}${escH(plB)}</strong>
+            <div style="margin-top:4px;font-size:11px">${tags}</div>
+          </div>`;
+        });
+        if (highPairs.length > 20) html += `<div style="font-size:11px;color:var(--muted)">… och ${highPairs.length - 20} till med hög konfidensˢ.</div>`;
+      }
+      if (medPairs.length) {
+        html += `<div style="font-size:12px;font-weight:700;color:var(--yellow);margin:10px 0 4px">🟡 Medel konfidensˢ — möjligen samma person:</div>`;
+        html += medPairs.slice(0, 10).map(r => {
+          const bA = r.pA.born ? ' f.' + r.pA.born : '';
+          const bB = r.pB.born ? ' f.' + r.pB.born : '';
+          return `<div style="font-size:12px;color:var(--text);margin-bottom:3px">${escH(r.pA.name)}${escH(bA)} ⟷ ${escH(r.pB.name)}${escH(bB)} <span style="color:var(--muted);font-size:11px">(${r.score}p)</span></div>`;
+        }).join('');
+        if (medPairs.length > 10) html += `<div style="font-size:11px;color:var(--muted)">… och ${medPairs.length - 10} till med medel konfidensˢ.</div>`;
+      }
+      if (lowPairs.length) {
+        html += `<div style="font-size:11px;color:var(--muted);margin-top:8px">⚪ ${lowPairs.length} par med låg konfidensˢ (visas ej här — kontrollera separat om relevant).</div>`;
+      }
+    }
+    html += `</div></div>`;
+  }
+
+  // ── 2. RELATIONSUPPSKATTNING ──
+  html += `<div class="analysis-block"><h3>📊 2. Relationsuppskattning</h3><div class="analysis-result">`;
   if (ab_cm) {
     const est = estimateRelation(ab_cm);
     html += `<div class="finding ${est.conf === 'good' ? 'good' : 'warn'}">
@@ -2850,7 +2919,7 @@ function runAnalysisCore() {
   html += `</div></div>`;
 
   // ── 2. GEMENSAMMA TRÄFFAR & TRIANGULERING ──
-  html += `<div class="analysis-block"><h3>🧩 2. Gemensamma DNA-träffar & triangulering</h3><div class="analysis-result">`;
+  html += `<div class="analysis-block"><h3>🧩 3. Gemensamma DNA-träffar & triangulering</h3><div class="analysis-result">`;
   if (!state.matches.length) {
     html += `<div class="finding">Inga gemensamma DNA-träffar inlagda.</div>`;
   } else {
@@ -2915,7 +2984,7 @@ function runAnalysisCore() {
   html += `</div></div>`;
 
   // ── 3. KONSISTENSKONTROLL ──
-  html += `<div class="analysis-block"><h3>✅ 3. Konsistenskontroll</h3><div class="analysis-result">`;
+  html += `<div class="analysis-block"><h3>✅ 4. Konsistenskontroll</h3><div class="analysis-result">`;
   let consistencyIssues = 0;
   for (const m of state.matches) {
     const checks = [
@@ -2939,9 +3008,9 @@ function runAnalysisCore() {
   if (!state.matches.length) html += `<div class="finding">Inga träffar att kontrollera.</div>`;
   html += `</div></div>`;
 
-  // ── 4. GEOGRAFISK-TEMPORAL ANALYS ──
+  // ── 5. GEOGRAFISK-TEMPORAL ANALYS ──
   var placesB = state.gedcomB ? extractPlaceTimes(state.gedcomB.persons) : [];
-  html += `<div class="analysis-block"><h3>🗺 4. Geografisk-temporal analys</h3><div class="analysis-result">
+  html += `<div class="analysis-block"><h3>🗺 5. Geografisk-temporal analys</h3><div class="analysis-result">
     <div class="finding" style="font-size:11px;color:var(--muted);border-left-color:var(--muted);background:transparent;padding:4px 8px;margin-bottom:8px">
       Jämför orter i A:s och B:s GEDCOM-träd. <span style="font-size:10px">Kön: <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#5b9bd5;vertical-align:middle"></span> Man &nbsp;<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#e07ab0;vertical-align:middle"></span> Kvinna &nbsp;<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#888;vertical-align:middle"></span> Okänt</span><br>Två grupper: <strong>Stark träff</strong> (≤10 år — troligen samma generation) och <strong>Möjlig träff</strong> (11–20 år — kan vara relaterade generationer). Kyrkogårdar exkluderas.
     </div>`;
@@ -2985,8 +3054,8 @@ function runAnalysisCore() {
   }
   html += `</div></div>`;
 
-  // ── 4b. GRENANANALYS ──
-  html += `<div class="analysis-block"><h3>🌿 4b. Grenananalys — sannolik gren</h3><div class="analysis-result">
+  // ── 5b. GRENANANALYS ──
+  html += `<div class="analysis-block"><h3>🌿 5b. Grenananalys — sannolik gren</h3><div class="analysis-result">
     <div class="finding" style="font-size:11px;color:var(--muted);border-left-color:var(--muted);background:transparent;padding:4px 8px;margin-bottom:8px">
       Procentsatserna visar hur sannolikt det är att det gemensamma upphovet finns på respektive gren, baserat på tre faktorer: vart DNA-träffarna pekar (mors/fars sida via testpersonerna), geografiska överlapp med B:s träd, och hur många kända anor som finns på grenen att jämföra med.
     </div>`;
@@ -3075,7 +3144,7 @@ function runAnalysisCore() {
   html += `</div></div>`;
 
     // ── 5. BARN UTAN FAR ──
-  html += `<div class="analysis-block"><h3>👶 5. Barn utan fadersuppgift</h3><div class="analysis-result">`;
+  html += `<div class="analysis-block"><h3>👶 6. Barn utan fadersuppgift</h3><div class="analysis-result">`;
   if (!state.gedcomA || !state.gedcomB) {
     html += `<div class="finding warn">Ladda GEDCOM-filer för att köra analys av barn utan far.</div>`;
   } else {
@@ -3111,7 +3180,7 @@ function runAnalysisCore() {
   html += `</div></div>`;
 
   // ── 6. HYPOTES OCH LETANDETIPS ──
-  html += `<div class="analysis-block" style="border-color:var(--accent2)"><h3>🔭 6. Hypotes — var letar man vidare?</h3><div class="analysis-result">
+  html += `<div class="analysis-block" style="border-color:var(--accent2)"><h3>🔭 7. Hypotes — var letar man vidare?</h3><div class="analysis-result">
     <div class="finding" style="font-size:11px;color:var(--muted);border-left-color:var(--muted);background:transparent;padding:4px 8px;margin-bottom:8px">
       Baseras på gemensamma anor ur anträdena, triangulerade segment, cM-värden och grenananalys.
     </div>`;
@@ -3472,7 +3541,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.0.34';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.1.02';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -3508,9 +3577,9 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.0.34</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.1.02</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v1.0.34 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v1.1.02 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
   const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
@@ -3530,7 +3599,7 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.0.34\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.1.02\n${'='.repeat(50)}\n\n` + tmp.innerText;
   const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
   const chosenTxt = prompt('Exportera som text:', suggestedTxt);
   if (chosenTxt === null) return;
@@ -4191,7 +4260,7 @@ function chatAddToReport() {
   section.className = 'analysis-block';
   section.style.borderColor = 'var(--accent2)';
   section.innerHTML = `
-    <h3>🤖 7. AI-dialog — ${escH(provLabel)}</h3>
+    <h3>🤖 8. AI-dialog — ${escH(provLabel)}</h3>
     <div class="analysis-result">
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Exporterad: ${escH(timestamp)} · ${chatState.history.filter(function(m){return m.role==='user';}).length} frågor</div>
       ${dialogHtml}
@@ -4203,7 +4272,7 @@ function chatAddToReport() {
   else outputEl.appendChild(section);
 
   // Bekräfta och navigera till rapporten
-  chatAddMessage('system-note', '✓ AI-dialogen har lagts till i analysrapporten (avsnitt 7).');
+  chatAddMessage('system-note', '✓ AI-dialogen har lagts till i analysrapporten (avsnitt 8).');
   setTimeout(function() { App.showTab('analys'); }, 800);
 }
 
@@ -4588,7 +4657,6 @@ function renderChromosomeMap() {
   });
 
   container.innerHTML = html || '<div style="color:var(--muted);font-size:13px">Inga segment matchar filtret.</div>';
-  console.log('CHR DEBUG: html length=' + html.length + ' chrsRendered=' + chrsToShow.length);
   } catch(e) {
     console.error('CHR ERROR:', e);
     container.innerHTML = '<div style="color:red;font-size:12px">Fel vid rendering: ' + e.message + '</div>';
@@ -4622,6 +4690,167 @@ function chrMoveTip(e) {
 function chrHideTip() {
   const tip = document.getElementById('chr-tooltip');
   if (tip) tip.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════
+// GEDCOM-JÄMFÖRELSE
+// ═══════════════════════════════════════════════
+
+// Levenshtein-avstånd (för namnlikhet)
+function levenshtein(a, b) {
+  if (!a || !b) return Math.max((a||'').length, (b||'').length);
+  a = a.toLowerCase(); b = b.toLowerCase();
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m+1}, (_,i) => Array.from({length: n+1}, (_,j) => i===0?j:j===0?i:0));
+  for (let i=1;i<=m;i++) for (let j=1;j<=n;j++)
+    dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+
+// Normaliserad namnlikhet 0..1 (1 = identiska)
+function nameSimilarity(a, b) {
+  if (!a || !b) return 0;
+  a = a.toLowerCase().replace(/[^a-zåäöéèü ]/g,'').trim();
+  b = b.toLowerCase().replace(/[^a-zåäöéèü ]/g,'').trim();
+  if (a === b) return 1;
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 1;
+  return 1 - levenshtein(a, b) / maxLen;
+}
+
+// Dela upp ett namn i förnamn-tokens och efternamn
+function parseName(personObj) {
+  // person.name är redan trimmat utan snedstreck
+  // person.surname är efternamnet från /.../ i lowercase
+  const full = (personObj.name || '').toLowerCase().replace(/[^a-zåäöéèü ]/g,' ').trim();
+  const surname = (personObj.surname || '').toLowerCase();
+  const tokens = full.split(/\s+/).filter(Boolean);
+  // Förnamn = tokens minus efternamnet
+  const givenTokens = tokens.filter(t => t !== surname && !surname.includes(t) || tokens.length === 1);
+  return { given: givenTokens, surname };
+}
+
+// Ortslikhet: dela på komma/semikolon, ta första delen
+function placeCore(placeStr) {
+  if (!placeStr) return '';
+  return placeStr.split(/[,;]/)[0].trim().toLowerCase().replace(/[^a-zåäöéèü ]/g,'');
+}
+
+// Beräkna konfidenspoäng mellan två GEDCOM-poster
+function scoreGedcomPair(pA, pB) {
+  const reasons = [];
+  let score = 0;
+
+  // ── Efternamn ──
+  const snA = (pA.surname || '').trim().toLowerCase();
+  const snB = (pB.surname || '').trim().toLowerCase();
+  const snSim = snA && snB ? nameSimilarity(snA, snB) : 0;
+  if (snA && snB && snSim >= 0.85) {
+    const pts = snSim >= 0.99 ? 35 : snSim >= 0.92 ? 28 : 20;
+    score += pts;
+    reasons.push(snSim >= 0.99 ? 'Identiskt efternamn' : 'Liknande efternamn (' + Math.round(snSim*100) + '%)');
+  } else if (snA && snB) {
+    return null; // Helt olika efternamn → skippa paret
+  }
+
+  // ── Förnamn (första förnamnet eller bästa token-match) ──
+  const nmA = parseName(pA);
+  const nmB = parseName(pB);
+  const gA = nmA.given;
+  const gB = nmB.given;
+  let bestGiven = 0;
+  for (const a of gA) for (const b of gB) {
+    const s = nameSimilarity(a, b);
+    if (s > bestGiven) bestGiven = s;
+  }
+  if (gA.length && gB.length && bestGiven >= 0.80) {
+    const pts = bestGiven >= 0.99 ? 30 : bestGiven >= 0.90 ? 22 : 14;
+    score += pts;
+    reasons.push(bestGiven >= 0.99 ? 'Identiskt förnamn' : 'Liknande förnamn (' + Math.round(bestGiven*100) + '%)');
+  } else if (gA.length && gB.length && bestGiven < 0.50) {
+    return null; // Tydligt olika förnamn → skippa
+  }
+
+  // Kräv minst att efternamn ELLER förnamn matchade
+  if (score === 0) return null;
+
+  // ── Födelseår ──
+  const bA = pA.born, bB = pB.born;
+  if (bA && bB) {
+    const diff = Math.abs(bA - bB);
+    if (diff === 0) { score += 25; reasons.push('Identiskt födelseår (' + bA + ')'); }
+    else if (diff <= 2) { score += 18; reasons.push('Födelseår ±' + diff + ' år (' + bA + '/' + bB + ')'); }
+    else if (diff <= 5) { score += 10; reasons.push('Födelseår ±' + diff + ' år'); }
+    else if (diff <= 10) { score += 4; reasons.push('Födelseår avviker ' + diff + ' år'); }
+    else { score -= 15; reasons.push('Födelseår avviker ' + diff + ' år ⚠'); }
+  } else if (bA || bB) {
+    reasons.push('Födelseår saknas för ' + (bA ? 'B' : 'A'));
+  }
+
+  // ── Födelseort ──
+  const plA = placeCore(pA.bornPlace);
+  const plB = placeCore(pB.bornPlace);
+  if (plA && plB) {
+    const plSim = nameSimilarity(plA, plB);
+    if (plSim >= 0.85) { score += 15; reasons.push('Liknande födelseort'); }
+    else if (plSim >= 0.60) { score += 6; reasons.push('Delvis matchande ort'); }
+    else { score -= 5; reasons.push('Olika födelseort (' + pA.bornPlace.split(',')[0] + ' / ' + pB.bornPlace.split(',')[0] + ')'); }
+  }
+
+  // ── Kön ──
+  if (pA.sex && pB.sex && pA.sex !== pB.sex) return null; // Garanterat fel par
+  if (pA.sex && pB.sex && pA.sex === pB.sex) { score += 5; reasons.push('Samma kön'); }
+
+  // ── Dödsdatum (om båda har) ──
+  if (pA.died && pB.died) {
+    const dDiff = Math.abs(pA.died - pB.died);
+    if (dDiff === 0) { score += 8; reasons.push('Identiskt dödsår'); }
+    else if (dDiff <= 2) { score += 4; reasons.push('Dödsår ±' + dDiff); }
+  }
+
+  return { score, reasons };
+}
+
+// Konvertera poäng till konfidenssnivå
+function gedcompConf(score) {
+  if (score >= 70) return 'high';
+  if (score >= 40) return 'medium';
+  return 'low';
+}
+function gedcompConfLabel(score) {
+  if (score >= 70) return 'Hög konfidensˢ';
+  if (score >= 40) return 'Medel konfidensˢ';
+  return 'Låg konfidensˢ';
+}
+
+// Kör hela jämförelsen
+function runGedcompAnalysis() {
+  const gA = state.gedcomA;
+  const gB = state.gedcomB;
+  if (!gA || !gB) return [];
+
+  const results = [];
+  const psA = gA.persons;
+  const psB = gB.persons;
+
+  for (const pA of psA) {
+    const snA = (pA.surname || '').toLowerCase().trim();
+    if (!snA && !pA.name) continue;
+    for (const pB of psB) {
+      const snB = (pB.surname || '').toLowerCase().trim();
+      // Snabb pre-filter: om båda har efternamn och de börjar helt olika → hoppa över
+      if (snA && snB && snA[0] !== snB[0] && levenshtein(snA.slice(0,3), snB.slice(0,3)) > 2) continue;
+      const res = scoreGedcomPair(pA, pB);
+      if (res && res.score >= 25) {
+        results.push({ pA, pB, score: res.score, reasons: res.reasons, conf: gedcompConf(res.score) });
+      }
+    }
+  }
+
+  // Sortera på poäng fallande
+  results.sort((a,b) => b.score - a.score);
+  return results;
 }
 
 // ═══════════════════════════════════════════════
