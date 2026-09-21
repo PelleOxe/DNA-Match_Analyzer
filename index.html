@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v1.1.21</title>
+<title>DNA-Match Analyzer v1.1.27</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -439,7 +439,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v1.1.21</div>
+      <div class="app-version">v1.1.27</div>
     </div>
   </div>
   <div class="header-actions">
@@ -496,6 +496,10 @@
         <div class="person-selected-display" id="personASelected"></div>
       </div>
       <div class="field">
+        <label>Person A:s namn i DNA-databasen <span style="font-weight:400;color:var(--muted);font-size:11px">(om annat än GEDCOM-namnet ovan)</span></label>
+        <input type="text" id="nameAdna" placeholder="t.ex. Per Andersson" autocomplete="off">
+      </div>
+      <div class="field">
         <label>Anteckningar om A</label>
         <textarea id="notesA" rows="2" placeholder="Bakgrund, plattform, m.m."></textarea>
       </div>
@@ -523,6 +527,10 @@
           <div class="person-search-list" id="personBList"></div>
         </div>
         <div class="person-selected-display" id="personBSelected"></div>
+      </div>
+      <div class="field">
+        <label>Person B:s namn i DNA-databasen <span style="font-weight:400;color:var(--muted);font-size:11px">(om annat än GEDCOM-namnet ovan)</span></label>
+        <input type="text" id="nameBdna" placeholder="t.ex. Thore Pettersson" autocomplete="off">
       </div>
       <div class="field">
         <label>Anteckningar om B</label>
@@ -779,7 +787,7 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 1.1.21<br>
+      <strong>Version:</strong> 1.1.27<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
       <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · FamilyTreeDNA CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
@@ -922,7 +930,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '1.1.21'
+  version: '1.1.27'
 };
 
 // Global namespace — filled at end of script
@@ -2976,8 +2984,10 @@ function runAnalysisCore() {
   if (!state.matches.length) {
     html += `<div class="finding">Inga gemensamma DNA-träffar inlagda.</div>`;
   } else {
-    var _nameBclean = nameB.replace(/\s*\(f\..*\)/, '').replace(/[*†°]+/g,'').trim().toLowerCase();
-    var _nameAclean = nameA.replace(/\s*\(f\..*\)/, '').replace(/[*†°]+/g,'').trim().toLowerCase();
+    var _nameBdnaVal = (document.getElementById('nameBdna').value || '').trim();
+    var _nameAdnaVal = (document.getElementById('nameAdna').value || '').trim();
+    var _nameBclean = (_nameBdnaVal || nameB).replace(/\s*\(f\..*\)/, '').replace(/[*†°<>]+/g,'').trim().toLowerCase();
+    var _nameAclean = (_nameAdnaVal || nameA).replace(/\s*\(f\..*\)/, '').replace(/[*†°<>]+/g,'').trim().toLowerCase();
     var _isMatchPair = function(m) {
       var mn = m.name.toLowerCase().replace(/[*†°]+/g,'').trim();
       return mn === _nameBclean || mn === _nameAclean;
@@ -3040,7 +3050,6 @@ function runAnalysisCore() {
     }
 
     // ── SEGMENTKLUSTER ──
-    // Gruppera överlappande segment per kromosom — varje kluster pekar troligen på ett gemensamt anparet
     var clusters = [];
     try {
       clusters = buildSegmentClusters(state.matches);
@@ -3048,31 +3057,102 @@ function runAnalysisCore() {
       console.error('[DNA] Kluster-krasch:', e.message);
     }
     if (clusters.length) {
-      html += `<div style="margin-top:14px;font-size:12px;font-weight:700;color:var(--accent2);border-top:1px solid var(--border);padding-top:10px;margin-bottom:6px">
+      html += `<div style="margin-top:14px;font-size:12px;font-weight:700;color:var(--accent2);border-top:1px solid var(--border);padding-top:10px;margin-bottom:4px">
         🔵 Segmentkluster — troliga gemensamma anpar</div>`;
-      html += `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-        Segment som överlappar på samma kromosomposition och delas av ≥2 träffar — troligen ärvda från samma gemensamma anparet.</div>`;
+      html += `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Bubbelstorlek = antal träffar. Färg: <span style="color:#2a78d6">■</span> 2 träffar &nbsp;<span style="color:#eda100">■</span> 3–4 &nbsp;<span style="color:#eb6834">■</span> 5–9 &nbsp;<span style="color:#e34948">■</span> 10+.
+        Hovra över en bubbla för att se vilka individer som ingår.</div>`;
 
-      clusters.forEach(function(cl) {
-        const nameList = cl.names.join(', ');
-        const pos = `K${cl.chr} ${cl.start.toFixed(1)}–${cl.end.toFixed(1)} Mb`;
-        const cmStr = cl.cm ? ` · ca ${cl.cm.toFixed(1)} cM` : '';
-        const hasAnpar = cl.anpar.length > 0;
+      // Serialisera klusterdata för canvas
+      var clusterJson = JSON.stringify(clusters.map(function(cl) {
+        return { chr: cl.chr, start: +cl.start.toFixed(1), end: +cl.end.toFixed(1),
+                 cm: cl.cm ? +cl.cm.toFixed(1) : 0, n: cl.names.length,
+                 names: cl.names, anpar: cl.anpar };
+      }));
 
-        if (hasAnpar) {
-          // Kluster med känt anparet — lyfts fram extra
-          html += `<div class="finding good" style="border-left-color:var(--yellow)">
-            <span style="color:var(--yellow);font-weight:700">★ ${pos}${cmStr}</span>
-            — <strong>${escH(cl.names.length)} träffar:</strong> ${escH(nameList)}<br>
-            <span style="font-size:11px;color:var(--yellow)">Möjligt anparet: ${cl.anpar.map(function(a){ return escH(a); }).join(' · ')}</span>
-          </div>`;
-        } else {
-          html += `<div class="finding">
-            <strong>${pos}${cmStr}</strong>
-            — ${escH(cl.names.length)} träffar: ${escH(nameList)}
-          </div>`;
+      var chartId = 'clusterChart_' + Date.now();
+      // Bygg SVG-bubbeldiagram direkt — ingen extern lib
+      var _W = 680, _H = 260, _PL = 52, _PR = 16, _PT = 16, _PB = 40;
+      var _tw = _W - _PL - _PR, _th = _H - _PT - _PB;
+      var _maxCm = 0;
+      clusters.forEach(function(cl){ if(cl.cm > _maxCm) _maxCm = cl.cm; });
+      _maxCm = Math.ceil((_maxCm + 20) / 20) * 20;
+
+      function _nCol(n, alpha) {
+        var rgb = n>=10 ? '227,73,72' : n>=5 ? '235,104,52' : n>=3 ? '237,161,0' : '42,120,214';
+        return 'rgba('+rgb+','+(alpha||1)+')';
+      }
+      function _px(chr){ return _PL + ((+chr - 0.5) / 23) * _tw; }
+      function _py(cm){ return _PT + _th - (cm / _maxCm) * _th; }
+      function _r(n){ return Math.max(n * 2.8, 6); }
+
+      // Serialisera för onclick/onmouseover
+      var _nameBdna = (document.getElementById('nameBdna').value || '').trim();
+      var _nameAdna = (document.getElementById('nameAdna').value || '').trim();
+      var _nameBclean = (_nameBdna || nameB).replace(/\s*\(f\..*\)/, '').replace(/[*†°<>]+/g,'').trim().toLowerCase();
+      var _nameAclean2 = (_nameAdna || nameA).replace(/\s*\(f\..*\)/, '').replace(/[*†°<>]+/g,'').trim().toLowerCase();
+      var _clStr = escH(JSON.stringify(clusters.map(function(cl){
+        return {chr:cl.chr, start:+cl.start.toFixed(1), end:+cl.end.toFixed(1),
+                cm:cl.cm?+cl.cm.toFixed(1):0, n:cl.names.length,
+                names:cl.names, anpar:cl.anpar,
+                hasB: cl.names.some(function(n){ return n.replace(/[*†°]+/g,'').trim().toLowerCase() === _nameBclean; }),
+                _bname: _nameBclean};
+      })));
+
+      var _svgId = 'clBubble_' + Date.now();
+      var _tipId = 'clTip_' + Date.now();
+
+      // SVG-cirklar
+      var circles = '';
+      clusters.forEach(function(cl, i) {
+        var cx = _px(cl.chr), cy = _py(cl.cm), r = _r(cl.names.length);
+        var _hasB = clusters[i] && clusters[i].names.some(function(n){ return n.replace(/[*†°]+/g,'').trim().toLowerCase() === _nameBclean; });
+        // Rita vit ring-cirkel BAKOM den färgade (synlig i alla browsers)
+        if (_hasB) {
+          circles += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+3)+'" fill="none" stroke="white" stroke-width="2.5" opacity="0.9"></circle>';
         }
+        circles += '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'"'
+          + ' fill="'+_nCol(cl.names.length,0.75)+'" stroke="'+_nCol(cl.names.length,1)+'" stroke-width="1.5"'
+          + ' data-i="'+i+'" data-tip="'+_tipId+'" style="cursor:pointer"'
+          + ' onmouseenter="clShowTip(this)" onmouseleave="clHideTip(this)">';
+        circles += '</circle>';
       });
+
+      // X-axel etiketter (var 2:a kromosom)
+      var xLabels = '';
+      for (var ci = 1; ci <= 22; ci += 2) {
+        xLabels += '<text x="'+_px(ci)+'" y="'+(_H-8)+'" text-anchor="middle" font-size="10" fill="#566a7f">'+ci+'</text>';
+      }
+      xLabels += '<text x="'+_px(23)+'" y="'+(_H-8)+'" text-anchor="middle" font-size="10" fill="#566a7f">X</text>';
+
+      // Y-axel etiketter
+      var yLabels = '';
+      for (var yi = 0; yi <= _maxCm; yi += 40) {
+        var yy = _py(yi);
+        yLabels += '<line x1="'+_PL+'" y1="'+yy+'" x2="'+(_W-_PR)+'" y2="'+yy+'" stroke="rgba(128,128,128,0.1)" stroke-width="1"/>';
+        yLabels += '<text x="'+(_PL-4)+'" y="'+(yy+4)+'" text-anchor="end" font-size="10" fill="#566a7f">'+yi+'</text>';
+      }
+
+      var svgHtml = '<svg id="'+_svgId+'" width="100%" viewBox="0 0 '+_W+' '+_H+'" style="display:block;overflow:visible"'
+        + ' data-clusters="'+_clStr+'">'
+        + yLabels + xLabels
+        + '<text x="10" y="'+(_PT+_th/2)+'" text-anchor="middle" font-size="10" fill="#566a7f" transform="rotate(-90,10,'+(_PT+_th/2)+')">cM</text>'
+        + '<text x="'+(_PL+_tw/2)+'" y="'+(_H-1)+'" text-anchor="middle" font-size="10" fill="#566a7f">Kromosom</text>'
+        + circles + '</svg>';
+
+      html += svgHtml;
+      html += '<div id="'+_tipId+'" style="display:block;min-height:36px;background:var(--bg2,#1a2535);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:11px;margin-top:6px;line-height:1.7;color:var(--muted,#8899aa)">Hovra över en bubbla för detaljer</div>';
+
+            var anparClusters = clusters.filter(function(cl){ return cl.anpar.length > 0; });
+      if (anparClusters.length) {
+        html += `<div style="margin-top:10px;font-size:11px;font-weight:700;color:var(--yellow)">★ Kluster med känt anparet:</div>`;
+        anparClusters.forEach(function(cl) {
+          html += `<div class="finding good" style="border-left-color:var(--yellow);margin-top:4px">
+            <span style="color:var(--yellow);font-weight:700">K${cl.chr} ${cl.start.toFixed(1)}–${cl.end.toFixed(1)} Mb</span>
+            · ${cl.names.length} träffar · ${escH(cl.anpar.join(' · '))}
+          </div>`;
+        });
+      }
     }
   }
   html += `</div></div>`;
@@ -3642,7 +3722,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.1.21';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.1.27';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -3678,9 +3758,9 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.1.21</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.1.27</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v1.1.21 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v1.1.27 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
   const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
@@ -3700,7 +3780,7 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.1.21\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.1.27\n${'='.repeat(50)}\n\n` + tmp.innerText;
   const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
   const chosenTxt = prompt('Exportera som text:', suggestedTxt);
   if (chosenTxt === null) return;
@@ -3717,7 +3797,9 @@ function getSessionData() {
     nameA: document.getElementById('nameA').value,
     nameB: document.getElementById('nameB').value,
     notesA: document.getElementById('notesA').value,
+    nameAdna: document.getElementById('nameAdna').value,
     notesB: document.getElementById('notesB').value,
+    nameBdna: document.getElementById('nameBdna').value,
     dna_ab: {
       cm: document.getElementById('ab_cm').value,
       seg: document.getElementById('ab_seg').value,
@@ -3754,7 +3836,9 @@ function loadSession(event) {
       document.getElementById('nameA').value = data.nameA || '';
       document.getElementById('nameB').value = data.nameB || '';
       document.getElementById('notesA').value = data.notesA || '';
+      if (data.nameAdna) document.getElementById('nameAdna').value = data.nameAdna;
       document.getElementById('notesB').value = data.notesB || '';
+      if (data.nameBdna) document.getElementById('nameBdna').value = data.nameBdna;
       if (data.dna_ab) {
         document.getElementById('ab_cm').value = data.dna_ab.cm || '';
         document.getElementById('ab_seg').value = data.dna_ab.seg || '';
@@ -3789,7 +3873,7 @@ function clearSession() {
   if (!confirm('Rensa all inmatad data — inklusive Person A/B och GEDCOM-filer?')) return;
 
   // Clear form fields
-  ['nameA','nameB','notesA','notesB','ab_cm','ab_seg','ab_longest','ab_comment'].forEach(function(id) {
+  ['nameA','nameB','notesA','notesB','nameAdna','nameBdna','ab_cm','ab_seg','ab_longest','ab_comment'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -5104,6 +5188,56 @@ function runGedcompAnalysis() {
   return results;
 }
 
+// ── KLUSTER BUBBEL-TOOLTIP ──
+function clShowTip(circle) {
+  var tipId = circle.getAttribute('data-tip');
+  var tip = document.getElementById(tipId);
+  if (!tip) return;
+  var svg = circle.closest('svg');
+  if (!svg) return;
+  var raw = svg.getAttribute('data-clusters');
+  if (!raw) return;
+  var clusters;
+  try { clusters = JSON.parse(raw); } catch(e) { return; }
+  var idx = +circle.getAttribute('data-i');
+  var cl = clusters[idx];
+  if (!cl) return;
+  var star = cl.anpar && cl.anpar.length
+    ? '<span style="color:#c9a84c">★ Möjligt anparet: '+cl.anpar.join(' · ')+'</span><br>' : '';
+  var namesList = cl.names.map(function(n) {
+    return cl.hasB && n === cl.names.find(function(x){ return x === n && cl.hasB; })
+      ? n : n;
+  });
+  // Markera Person B med fetstil
+  var namesHtml = cl.names.map(function(n) {
+    return cl.hasB && circle.getAttribute('data-has-b') === '1'
+      ? '<strong style="color:var(--text,#c8d8e8)">'+n+'</strong>' : n;
+  }).join(', ');
+  // Enklare: hasB finns på cl direkt
+  var namesHtml2 = cl.names.map(function(n, ni) {
+    var isB = cl._bIdx !== undefined ? ni === cl._bIdx : false;
+    return isB ? '<strong style="color:var(--text,#c8d8e8)">'+n+'</strong>' : n;
+  }).join(', ');
+  tip.style.color = '';
+  var _bn = (cl._bname || '').replace(/[^a-zåäö]/gi,'').toLowerCase();
+  tip.innerHTML = '<strong style="color:var(--text-primary,#c8d8e8)">K'+cl.chr+' '+cl.start+'–'+cl.end+' Mb</strong>'
+    + (cl.cm ? ' · ca '+cl.cm+' cM' : '') + ' · <strong>'+cl.n+' träffar</strong><br>'
+    + star
+    + '<span style="color:var(--muted,#8899aa)">' + cl.names.map(function(n){
+        var nc = n.replace(/[^a-zåäö]/gi,'').toLowerCase();
+        return (cl.hasB && _bn && nc.indexOf(_bn) >= 0)
+          ? '<strong style="color:#d0e8ff">'+n+'</strong>' : n;
+      }).join(', ') + '</span>';
+}
+function clHideTip(circle) {
+  var tipId = circle.getAttribute('data-tip');
+  var tip = document.getElementById(tipId);
+  if (tip) {
+    tip.style.color = 'var(--muted,#8899aa)';
+    tip.innerHTML = 'Hovra över en bubbla för detaljer';
+  }
+}
+
 // ═══════════════════════════════════════════════
 // KROMOSOM → RAPPORT
 // ═══════════════════════════════════════════════
@@ -5388,6 +5522,8 @@ App.chatClearApiKey     = chatClearApiKey;
 App.chatClear           = chatClear;
 App.chatRefreshContext  = chatRefreshContext;
 App.chatAddToReport     = chatAddToReport;
+App.clShowTip           = clShowTip;
+App.clHideTip           = clHideTip;
 App.chrAddToReport      = chrAddToReport;
 App.chrToggleName       = chrToggleName;
 App.chrSelectAll        = chrSelectAll;
