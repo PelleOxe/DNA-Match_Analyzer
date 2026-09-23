@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v1.1.27</title>
+<title>DNA-Match Analyzer v1.1.35</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -385,8 +385,12 @@
 
   /* SHARED MATCHES */
   .match-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; overflow: hidden; }
-  .match-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; user-select: none; }
-  .match-card-header:hover { background: rgba(168,197,218,0.04); }
+  .match-card-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; user-select: none; }
+  .match-expand-row { display: flex; align-items: center; gap: 6px; padding: 4px 14px; cursor: pointer; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); user-select: none; }
+  .match-expand-row:hover { background: rgba(168,197,218,0.04); color: var(--accent2); }
+  .match-expand-row.open { color: var(--accent2); }
+  .match-expand-section { display: none; }
+  .match-expand-section.open { display: block; }
   .match-name { font-weight: 700; font-size: 14px; flex: 1; }
   .match-meta { font-size: 12px; color: var(--muted); }
   .match-testers { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -439,7 +443,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v1.1.27</div>
+      <div class="app-version">v1.1.35</div>
     </div>
   </div>
   <div class="header-actions">
@@ -787,7 +791,7 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 1.1.27<br>
+      <strong>Version:</strong> 1.1.35<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
       <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · FamilyTreeDNA CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
@@ -930,7 +934,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '1.1.27'
+  version: '1.1.35'
 };
 
 // Global namespace — filled at end of script
@@ -1987,12 +1991,12 @@ function renderMatchCard(m, idx, overlapMap) {
 
 
   // Build segment tables per tester
-  // Antrade textarea — always visible directly under header, before segments
   let antradeHtml = `<div style="padding:8px 14px 10px;border-top:1px solid var(--border);background:var(--bg2)">
     <label style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px">
       Känd härstamning / anträde
     </label>
     <textarea
+      id="antrade_${idx}"
       style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:7px 10px;font-size:12px;font-family:var(--font);resize:vertical;min-height:52px;line-height:1.5"
       placeholder="t.ex. ULLA Olsson 1932–2025 / KARL Olsson 1909–2001 / [OLA Jönsson 1822–1871] / ..."
       oninput="App.updateMatchAntrade(${idx}, this.value)"
@@ -2000,7 +2004,7 @@ function renderMatchCard(m, idx, overlapMap) {
     >${escH(m.antrade||'')}</textarea>
     <div style="font-size:10px;color:var(--muted);margin-top:2px">[ ] = gemensamma anor · Sparas i sessionen</div>
   </div>`;
-  let segHtml = `<div style="padding:10px 14px 4px">
+  let detailHtml = `<div style="padding:10px 14px 4px">
     <div class="grid2" style="gap:8px;margin-bottom:10px">
       <div class="field" style="margin:0"><label>Relation till A</label>
         <input type="text" value="${escH(m.relA)}" placeholder="t.ex. 2:a kusin"
@@ -2008,6 +2012,18 @@ function renderMatchCard(m, idx, overlapMap) {
       <div class="field" style="margin:0"><label>Relation till B</label>
         <input type="text" value="${escH(m.relB)}" placeholder="t.ex. okänd"
           onchange="App.updateMatchMeta(${idx},'relB',this.value)" style="font-size:12px;padding:5px 8px"></div>
+    </div>
+    <div class="field" style="margin:0 0 10px">
+      <label>Riktigt namn / GEDCOM-alias <span style="font-weight:400;color:var(--muted);font-size:11px">— om DNA-namnet är "Privat" e.d.</span></label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="alias_${idx}" value="${escH(m.alias||'')}" placeholder="t.ex. Inger Rönnbom"
+          onclick="event.stopPropagation()"
+          onchange="App.updateMatchAlias(${idx}, this.value)"
+          style="font-size:12px;padding:5px 8px;flex:1">
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();App.lookupGedcomAlias(${idx})" title="Slå upp i GEDCOM och hämta anträde">🔍 Hämta ur GEDCOM</button>
+      </div>
+      <div id="alias_result_${idx}" style="font-size:11px;color:var(--muted);margin-top:3px">${m.alias && m.aliasFound ? '✓ Hittad i GEDCOM' : ''}</div>
+      <div id="alias_preview_${idx}" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:8px 10px;margin-top:6px;font-size:11px"></div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">${(() => {
       // Bygg en komplett tester-lista: befintliga + A och B om de saknas
@@ -2040,11 +2056,12 @@ function renderMatchCard(m, idx, overlapMap) {
     })()}</div>
   </div>`;
 
+  let tableHtml = '';
   m.testers.forEach(t => {
     if (!t.segments.length) return;
     const color = testerColor(t.name);
-    segHtml += `<div style="padding:4px 14px 4px;font-size:12px;font-weight:700;color:${color.fg}">${escH(t.name)}</div>`;
-    segHtml += `<table class="seg-table"><thead><tr>
+    tableHtml += `<div style="padding:4px 14px 4px;font-size:12px;font-weight:700;color:${color.fg}">${escH(t.name)}</div>`;
+    tableHtml += `<table class="seg-table"><thead><tr>
       <th>Chr</th><th>cM</th><th>Start (bp)</th><th>Slut (bp)</th><th>SNPs</th><th>Överlapp med</th>
     </tr></thead><tbody>`;
     t.segments.forEach(seg => {
@@ -2052,7 +2069,7 @@ function renderMatchCard(m, idx, overlapMap) {
       const overlaps = overlapMap[m.name]?.[key] || [];
       const overlapOthers = overlaps.filter(o => o !== m.name);
       const rowClass = overlapOthers.length ? 'seg-overlap' : '';
-      segHtml += `<tr class="${rowClass}">
+      tableHtml += `<tr class="${rowClass}">
         <td><span class="chr-badge">${escH(String(seg.chr))}</span></td>
         <td>${seg.cm != null ? seg.cm.toFixed(1) : '—'}</td>
         <td>${seg.start != null ? seg.start.toLocaleString('sv-SE') : '—'}</td>
@@ -2061,7 +2078,7 @@ function renderMatchCard(m, idx, overlapMap) {
         <td>${overlapOthers.length ? '<span class="tag tag-yellow">▲ '+escH(overlapOthers.slice(0,3).join(', '))+(overlapOthers.length>3?'…':'')+'</span>' : '—'}</td>
       </tr>`;
     });
-    segHtml += `</tbody></table>`;
+    tableHtml += `</tbody></table>`;
   });
 
   // Overlap alerts
@@ -2071,19 +2088,38 @@ function renderMatchCard(m, idx, overlapMap) {
   ).join('');
 
   const cardId = 'mc_' + idx;
+  const triId  = 'tri_' + idx;
+  const detId  = 'det_' + idx;
+
+  // Har triangulering?
+  const hasTri = alertHtml || (tableHtml && m.testers.some(t => t.segments.some(s => {
+    const key = s.chr + ':' + s.start + '-' + s.end;
+    return (overlapMap[m.name]?.[key]||[]).filter(o=>o!==m.name).length > 0;
+  })));
 
   return `<div class="match-card">
-    <div class="match-card-header" onclick="App.toggleMatchCard('${cardId}')">
-      <div class="match-name">${escH(m.name)}</div>
+    <div class="match-card-header">
+      <div class="match-name">${escH(m.name)}${m.alias ? ' <span style="font-size:11px;color:var(--muted);font-weight:400">(' + escH(m.alias) + ')</span>' : ''}</div>
       ${sideTag}
       <div class="match-testers">${testerBadges}</div>
       <div style="display:flex;gap:4px;margin-left:4px"></div>
       <button class="btn btn-sm" style="background:var(--accent);color:#fff;margin-left:4px" onclick="event.stopPropagation();App.removeMatch('${escH(m.name)}')">✕</button>
     </div>
-    ${alertHtml}
-    <div class="match-segments" id="${cardId}">
+    <div class="match-expand-row" id="${triId}_row" onclick="App.toggleMatchSection('${triId}','${triId}_row')">
+      <span id="${triId}_arrow">▶</span>
+      <span>Triangulering &amp; överlapp${alertHtml ? ' <span style="color:var(--yellow);font-size:10px">●</span>' : ''}</span>
+    </div>
+    <div class="match-expand-section" id="${triId}">
+      ${alertHtml}
+      ${tableHtml || '<div style="padding:10px 14px;color:var(--muted);font-size:12px">Inga segmentdata.</div>'}
+    </div>
+    <div class="match-expand-row" id="${detId}_row" onclick="App.toggleMatchSection('${detId}','${detId}_row')">
+      <span id="${detId}_arrow">▶</span>
+      <span>Härstamning &amp; relationer</span>
+    </div>
+    <div class="match-expand-section" id="${detId}">
       ${antradeHtml}
-    ${segHtml || '<div style="padding:12px 14px;color:var(--muted);font-size:12px">Inga segmentdata.</div>'}
+      ${detailHtml}
     </div>
   </div>`;
 }
@@ -2113,6 +2149,150 @@ function updateMatchMeta(idx, field, value) {
   if (m) m[field] = value;
 }
 
+function updateMatchAlias(idx, value) {
+  const m = state.matches[idx];
+  if (m) { m.alias = value; m.aliasFound = false; }
+}
+
+function lookupGedcomAlias(idx) {
+  const m = state.matches[idx];
+  if (!m) return;
+  const alias = (m.alias || '').trim();
+  if (!alias) { alert('Ange ett namn i alias-fältet först.'); return; }
+
+  const ged = state.gedcomA;
+  if (!ged) { alert('Ingen GEDCOM för A är laddad.'); return; }
+
+  const resultEl = document.getElementById('alias_result_' + idx);
+  const previewEl = document.getElementById('alias_preview_' + idx);
+
+  // Normalisera söksträng
+  const aClean = alias.toLowerCase().replace(/[^a-zåäö ]/gi,'').trim();
+  const aParts = aClean.split(/\s+/);
+
+  // Sök — kräv att ALLA delar av söktermen finns i namnet
+  const candidates = ged.persons.filter(function(p) {
+    const pn = (p.name||'').toLowerCase().replace(/[^a-zåäö ]/gi,'').trim();
+    return aParts.every(function(part) { return pn.includes(part); });
+  });
+
+  if (!candidates.length) {
+    if (resultEl) resultEl.innerHTML = '⚠ Hittades inte i GEDCOM A — kontrollera stavning';
+    if (previewEl) previewEl.style.display = 'none';
+    m.aliasFound = false;
+    return;
+  }
+
+  // Om flera kandidater — visa lista att välja bland
+  if (candidates.length > 1) {
+    // Spara kandidater för val
+    window['_gedCandidates_' + idx] = candidates.slice(0, 8).map(function(p){ return { id: p.id, name: p.name, born: p.born, died: p.died }; });
+    var opts = candidates.slice(0, 8).map(function(p, i) {
+      var label = escH(p.name||'') + (p.born ? ' f.' + p.born : '') + (p.died ? ' d.' + p.died : '');
+      return '<div style="margin:2px 0"><button class="btn btn-secondary btn-sm" style="text-align:left;font-size:11px;width:100%" '
+        + 'data-idx="' + idx + '" data-ci="' + i + '" onclick="App.pickGedcomCandidate(this)">'
+        + label + '</button></div>';
+    }).join('');
+    if (resultEl) resultEl.innerHTML = candidates.length + ' träffar — välj rätt person:';
+    if (previewEl) { previewEl.style.display = 'block'; previewEl.innerHTML = opts; }
+    return;
+  }
+
+  // Exakt en träff — bygg och visa förhandsgranskning
+  gedcomBuildPreview(idx, candidates[0].id);
+}
+
+// Bygg härstamningslinje uppåt från en person och visa förhandsgranskning
+function gedcomBuildPreview(idx, personId) {
+  const ged = state.gedcomA;
+  const m = state.matches[idx];
+  if (!ged || !m) return;
+
+  const resultEl  = document.getElementById('alias_result_' + idx);
+  const previewEl = document.getElementById('alias_preview_' + idx);
+
+  // Bygg linjär härstamning uppåt — välj en förälder per generation (fader prioriteras)
+  var chain = [];
+  var visited = {};
+  var p = ged.persons.find(function(x){ return x.id === personId || x.id === String(personId); });
+  while (p && !visited[p.id] && chain.length < 12) {
+    visited[p.id] = true;
+    chain.unshift(p); // lägg till i början → äldst först
+    // Gå uppåt via fader, sedan moder om ingen fader
+    var next = null;
+    if (p.fatherId) next = ged.persons.find(function(x){ return x.id===p.fatherId; });
+    else if (p.motherId) next = ged.persons.find(function(x){ return x.id===p.motherId; });
+    p = next;
+  }
+
+  // Formatera varje person
+  var parts = chain.map(function(person) {
+    var s = person.name || '';
+    if (person.born) s += ' ' + person.born;
+    if (person.died) s += '–' + person.died;
+    return s;
+  });
+
+  var antradeStr = parts.join(' / ');
+  var person0 = chain[chain.length - 1]; // den sökta personen
+
+  // Visa förhandsgranskning
+  if (resultEl) resultEl.innerHTML = '✓ Hittad: <strong>' + escH(person0.name||'') + '</strong>'
+    + (person0.born ? ' f.' + person0.born : '');
+
+  if (previewEl) {
+    previewEl.style.display = 'block';
+    previewEl.innerHTML =
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">Förhandsvisning av anträde:</div>'
+      + '<div style="font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);line-height:1.6;white-space:pre-wrap;word-break:break-word;margin-bottom:6px">'
+      + escH(antradeStr) + '</div>'
+      + '<div style="display:flex;gap:8px">'
+      + '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();App.applyGedcomAlias(' + idx + ',' + JSON.stringify(antradeStr) + ')">✓ Använd detta anträde</button>'
+      + '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();document.getElementById(\'alias_preview_' + idx + '\').style.display=\'none\'">Avbryt</button>'
+      + '</div>';
+    setTimeout(function() { previewEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60);
+  }
+  m.aliasFound = true;
+}
+
+function pickGedcomCandidate(btn) {
+  var idx = +btn.getAttribute('data-idx');
+  var ci  = +btn.getAttribute('data-ci');
+  var candidates = window['_gedCandidates_' + idx];
+  if (!candidates || !candidates[ci]) return;
+  // Markera vald
+  btn.closest('[id^="alias_preview_"]') && btn.closest('[id^="alias_preview_"]').querySelectorAll('button').forEach(function(b){ b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
+  btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary');
+  selectGedcomCandidate(idx, candidates[ci].id);
+}
+
+function selectGedcomCandidate(idx, personId) {
+  const previewEl = document.getElementById('alias_preview_' + idx);
+  if (previewEl) { previewEl.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:4px">Hämtar...</div>'; previewEl.style.display = 'block'; }
+  // Markera vald knapp
+  document.querySelectorAll('[data-matchidx="'+idx+'"]').forEach(function(b){ b.style.background=''; b.style.fontWeight=''; });
+  var btn = document.querySelector('[data-matchidx="'+idx+'"][data-personid="'+personId.replace(/"/g,'')+'"]');
+  if (btn) { btn.style.background='var(--accent2)'; btn.style.fontWeight='700'; }
+  setTimeout(function(){ gedcomBuildPreview(idx, personId); }, 30);
+}
+
+function applyGedcomAlias(idx, antradeStr) {
+  const m = state.matches[idx];
+  if (!m) return;
+  m.antrade = antradeStr;
+  m.aliasFound = true;
+
+  // Uppdatera textarea direkt — utan att kollapsa kortet via renderMatchList
+  const ta = document.getElementById('antrade_' + idx);
+  if (ta) ta.value = antradeStr;
+
+  const previewEl = document.getElementById('alias_preview_' + idx);
+  if (previewEl) previewEl.style.display = 'none';
+
+  const resultEl = document.getElementById('alias_result_' + idx);
+  if (resultEl) resultEl.innerHTML = '✓ Anträde hämtat från GEDCOM';
+}
+
 function updateTesterCm(matchIdx, testerName, value) {
   const m = state.matches[matchIdx];
   if (!m) return;
@@ -2132,6 +2312,16 @@ function updateTesterCm(matchIdx, testerName, value) {
 function updateMatchAntrade(idx, value) {
   const m = state.matches[idx];
   if (m) m.antrade = value;
+}
+
+function toggleMatchSection(sectionId, rowId) {
+  var sec = document.getElementById(sectionId);
+  var row = document.getElementById(rowId);
+  var arrow = document.getElementById(sectionId + '_arrow');
+  if (!sec) return;
+  var isOpen = sec.classList.toggle('open');
+  if (row) row.classList.toggle('open', isOpen);
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▶';
 }
 
 function toggleMatchCard(id) {
@@ -3722,7 +3912,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.1.27';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.1.35';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -3758,9 +3948,9 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.1.27</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.1.35</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v1.1.27 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v1.1.35 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
   const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
@@ -3780,7 +3970,7 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.1.27\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.1.35\n${'='.repeat(50)}\n\n` + tmp.innerText;
   const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
   const chosenTxt = prompt('Exportera som text:', suggestedTxt);
   if (chosenTxt === null) return;
@@ -5114,11 +5304,13 @@ function scoreGedcomPair(pA, pB) {
   const bA = pA.born, bB = pB.born;
   if (bA && bB) {
     const diff = Math.abs(bA - bB);
+    if (diff > 30) return null; // Omöjligt att vara samma person — uteslut helt
     if (diff === 0) { score += 25; reasons.push('Identiskt födelseår (' + bA + ')'); }
     else if (diff <= 2) { score += 18; reasons.push('Födelseår ±' + diff + ' år (' + bA + '/' + bB + ')'); }
     else if (diff <= 5) { score += 10; reasons.push('Födelseår ±' + diff + ' år'); }
     else if (diff <= 10) { score += 4; reasons.push('Födelseår avviker ' + diff + ' år'); }
-    else { score -= 15; reasons.push('Födelseår avviker ' + diff + ' år ⚠'); }
+    else if (diff <= 20) { score -= 8; reasons.push('Födelseår avviker ' + diff + ' år ⚠'); }
+    else { score -= 20; reasons.push('Födelseår avviker ' + diff + ' år ⚠'); }
   } else if (bA || bB) {
     reasons.push('Födelseår saknas för ' + (bA ? 'B' : 'A'));
   }
@@ -5150,12 +5342,12 @@ function scoreGedcomPair(pA, pB) {
 // Konvertera poäng till konfidenssnivå
 function gedcompConf(score) {
   if (score >= 70) return 'high';
-  if (score >= 40) return 'medium';
+  if (score >= 50) return 'medium';
   return 'low';
 }
 function gedcompConfLabel(score) {
   if (score >= 70) return 'Hög konfidensˢ';
-  if (score >= 40) return 'Medel konfidensˢ';
+  if (score >= 50) return 'Medel konfidensˢ';
   return 'Låg konfidensˢ';
 }
 
@@ -5494,9 +5686,16 @@ App.handleFtdnaFiles     = handleFtdnaFiles;
 App.handleFtdnaChrFiles  = handleFtdnaChrFiles;
 App.handleDroppedFiles   = handleDroppedFiles;
 App.setTesterFilter      = setTesterFilter;
+App.toggleMatchSection   = toggleMatchSection;
 App.toggleMatchCard      = toggleMatchCard;
 App.removeMatch          = removeMatch;
 App.toggleRole           = toggleRole;
+App.updateMatchAlias     = updateMatchAlias;
+App.lookupGedcomAlias    = lookupGedcomAlias;
+App.applyGedcomAlias     = applyGedcomAlias;
+App.pickGedcomCandidate  = pickGedcomCandidate;
+App.selectGedcomCandidate = selectGedcomCandidate;
+App.gedcomBuildPreview   = gedcomBuildPreview;
 App.updateMatchMeta      = updateMatchMeta;
 App.updateTesterCm       = updateTesterCm;
 App.updateMatchAntrade   = updateMatchAntrade;
