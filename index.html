@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v1.1.35</title>
+<title>DNA-Match Analyzer v1.2.01</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -443,7 +443,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v1.1.35</div>
+      <div class="app-version">v1.2.01</div>
     </div>
   </div>
   <div class="header-actions">
@@ -791,7 +791,7 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 1.1.35<br>
+      <strong>Version:</strong> 1.2.01<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
       <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · FamilyTreeDNA CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
@@ -934,7 +934,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '1.1.35'
+  version: '1.2.01'
 };
 
 // Global namespace — filled at end of script
@@ -1532,14 +1532,14 @@ function handleDroppedFiles(files) {
       var firstLine = text.split(/\r?\n/)[0].toLowerCase();
       if (firstLine.includes('matching bucket') || firstLine.includes('longest block')) {
         var result = parseFtdnaCsv(text, file.name);
-        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error, result.isPairwise);
       } else if (firstLine.includes('match name') && firstLine.includes('chromosome') && !firstLine.includes('name,match name')) {
         // FTDNA Chromosome Browser format
         var result = parseFtdnaChromosomeCsv(text, file.name);
-        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error, result.isPairwise);
       } else {
         var result = parseMyHeritageCsv(text, file.name);
-        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+        updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error, result.isPairwise);
       }
     };
     reader.readAsText(file, 'UTF-8');
@@ -1553,7 +1553,7 @@ function handleFtdnaFiles(files) {
     var reader = new FileReader();
     reader.onload = function(ev) {
       var result = parseFtdnaCsv(ev.target.result, file.name);
-      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error, result.isPairwise);
     };
     reader.onerror = function() { updateCsvLoadedList(file.name, 0, 0, 'Kunde inte läsa filen'); };
     reader.readAsText(file, 'UTF-8');
@@ -1693,7 +1693,7 @@ function handleFtdnaChrFiles(files) {
     var reader = new FileReader();
     reader.onload = function(ev) {
       var result = parseFtdnaChromosomeCsv(ev.target.result, file.name);
-      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error, result.isPairwise);
     };
     reader.onerror = function() { updateCsvLoadedList(file.name, 0, 0, 'Kunde inte läsa filen'); };
     reader.readAsText(file, 'UTF-8');
@@ -1812,7 +1812,7 @@ function handleCsvFiles(files) {
       const loadingId = 'csv_loading_' + file.name.replace(/\W/g,'_');
       const loadingEl = document.getElementById(loadingId);
       if (loadingEl) loadingEl.remove();
-      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error);
+      updateCsvLoadedList(file.name, result.matchCount, result.segCount, result.error, result.isPairwise);
     };
     reader.onerror = (ev) => {
       console.error('FileReader error:', ev);
@@ -1842,33 +1842,31 @@ function parseMyHeritageCsv(text, filename) {
     return -1;
   };
 
-  const iName  = findCol('name');                     // tester's own name
-  const iMatch = findCol('match name', 'matchname');  // the DNA match
+  const iName  = findCol('name');
+  const iMatch = findCol('match name', 'matchname');
   const iChr   = findCol('chromosome', 'chr');
   const iStart = findCol('start location', 'start');
   const iEnd   = findCol('end location', 'end');
   const iCm    = findCol('centimorgan', 'cm');
   const iSnps  = findCol('snp');
 
-  console.log('CSV header cols:', headerCols);
-  console.log('Col indices — name:', iName, 'match:', iMatch, 'chr:', iChr,
-              'start:', iStart, 'end:', iEnd, 'cm:', iCm, 'snps:', iSnps);
-
   if (iMatch === -1) return { matchCount: 0, segCount: 0, error: 'Kolumn "Match Name" hittades inte. Kontrollera att det är en MyHeritage segment-export.' };
   if (iChr === -1)   return { matchCount: 0, segCount: 0, error: 'Kolumn "Chromosome" hittades inte.' };
 
   const grouped = {};
   let segCount = 0;
+  const uniqueMatches = new Set();
+  const uniqueTesters = new Set();
 
   for (let i = 1; i < nonEmpty.length; i++) {
     const row = splitCsvLine(nonEmpty[i]);
-    const matchName  = iMatch >= 0 ? row[iMatch]?.trim() : '';
-    const testerFull = iName  >= 0 ? row[iName]?.trim() : '';
-    const chr        = iChr   >= 0 ? row[iChr]?.trim()  : '';
-    const cmRaw      = iCm    >= 0 ? row[iCm]?.trim()   : '';
-    const startRaw   = iStart >= 0 ? row[iStart]?.trim(): '';
-    const endRaw     = iEnd   >= 0 ? row[iEnd]?.trim()  : '';
-    const snpsRaw    = iSnps  >= 0 ? row[iSnps]?.trim() : '';
+    const matchName  = iMatch >= 0 ? (row[iMatch]||'').trim() : '';
+    const testerFull = iName  >= 0 ? (row[iName] ||'').trim() : '';
+    const chr        = iChr   >= 0 ? (row[iChr]  ||'').trim() : '';
+    const cmRaw      = iCm    >= 0 ? (row[iCm]   ||'').trim() : '';
+    const startRaw   = iStart >= 0 ? (row[iStart]||'').trim() : '';
+    const endRaw     = iEnd   >= 0 ? (row[iEnd]  ||'').trim() : '';
+    const snpsRaw    = iSnps  >= 0 ? (row[iSnps] ||'').trim() : '';
 
     if (!matchName || matchName === 'All selected DNA Matches') continue;
     if (!chr) continue;
@@ -1879,6 +1877,9 @@ function parseMyHeritageCsv(text, filename) {
     const snps  = parseInt(snpsRaw.replace(/\s/g,''))   || null;
 
     const testerShort = shortName(testerFull) || 'Okänd';
+    uniqueMatches.add(matchName);
+    uniqueTesters.add(testerShort);
+
     const key = matchName + '|||' + testerShort;
     if (!grouped[key]) grouped[key] = { matchName, testerName: testerShort, totalCm: 0, segments: [] };
     grouped[key].segments.push({ chr, cm, start, end, snps });
@@ -1887,7 +1888,14 @@ function parseMyHeritageCsv(text, filename) {
   }
 
   const matchCount = Object.keys(grouped).length;
-  console.log('Parsed', matchCount, 'matches,', segCount, 'segments from', filename);
+
+  // Detektera parvis fil — en testare, en träff
+  const isPairwise = uniqueMatches.size === 1 && uniqueTesters.size === 1;
+  if (isPairwise) {
+    const matchName = [...uniqueMatches][0];
+    const testerName = [...uniqueTesters][0];
+    console.log('[DNA] Parvis CSV detekterad:', testerName, '↔', matchName, '—', segCount, 'segment');
+  }
 
   if (!matchCount) return { matchCount: 0, segCount: 0, error: 'Inga matchrader hittades i filen.' };
 
@@ -1902,9 +1910,9 @@ function parseMyHeritageCsv(text, filename) {
   updateTesterFilterButtons();
 
   if (!state.csvFiles) state.csvFiles = [];
-  state.csvFiles.push({ filename, matchCount, segCount });
+  state.csvFiles.push({ filename, matchCount, segCount, isPairwise: uniqueMatches.size === 1 && uniqueTesters.size === 1 });
 
-  return { matchCount, segCount, error: null };
+  return { matchCount, segCount, error: null, isPairwise: uniqueMatches.size === 1 && uniqueTesters.size === 1 };
 }
 
 // Batch version — does NOT call renderMatchList (caller does it once)
@@ -1924,7 +1932,19 @@ function addOrMergeMatchBatch(matchName, testerName, cm, segments) {
     match.testers.push(tester);
   }
   if (cm) tester.cm = cm;
-  tester.segments.push(...segments);
+
+  // Deduplicera segment — hoppa över exakt samma chr+start+end
+  const existingKeys = new Set(tester.segments.map(s => s.chr + ':' + s.start + '-' + s.end));
+  var added = 0;
+  segments.forEach(function(s) {
+    const key = s.chr + ':' + s.start + '-' + s.end;
+    if (!existingKeys.has(key)) {
+      tester.segments.push(s);
+      existingKeys.add(key);
+      added++;
+    }
+  });
+  return added;
 }
 
 function shortName(fullName) {
@@ -1951,10 +1971,12 @@ function splitCsvLine(line) {
   return result;
 }
 
-function updateCsvLoadedList(filename, matchCount, segCount, error) {
+function updateCsvLoadedList(filename, matchCount, segCount, error, isPairwise) {
   const el = document.getElementById('csvLoadedList');
   if (error) {
     el.innerHTML += `<div style="margin-top:6px;color:var(--red)">✗ <strong>${escH(filename)}</strong> — ${escH(error)}</div>`;
+  } else if (isPairwise) {
+    el.innerHTML += `<div style="margin-top:6px;color:var(--green)">✓ <strong>${escH(filename)}</strong> — parvis fil · ${segCount} segment inlästa</div>`;
   } else {
     el.innerHTML += `<div style="margin-top:6px;color:var(--green)">✓ <strong>${escH(filename)}</strong> — ${matchCount} träffar, ${segCount} segment inlästa</div>`;
   }
@@ -3243,6 +3265,7 @@ function runAnalysisCore() {
     var clusters = [];
     try {
       clusters = buildSegmentClusters(state.matches);
+      state._segT = computeSegThreshold(state.matches);
     } catch(e) {
       console.error('[DNA] Kluster-krasch:', e.message);
     }
@@ -3251,7 +3274,8 @@ function runAnalysisCore() {
         🔵 Segmentkluster — troliga gemensamma anpar</div>`;
       html += `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">
         Bubbelstorlek = antal träffar. Färg: <span style="color:#2a78d6">■</span> 2 träffar &nbsp;<span style="color:#eda100">■</span> 3–4 &nbsp;<span style="color:#eb6834">■</span> 5–9 &nbsp;<span style="color:#e34948">■</span> 10+.
-        Hovra över en bubbla för att se vilka individer som ingår.</div>`;
+        Hovra över en bubbla för att se vilka individer som ingår samt en uppskattning av generationsdjupet.
+        <br><span style="font-size:10px">Generationskurvan bygger på segmentets längd (median-cM i klustret, tröskel ${state._segT||7} cM) — ett enskilt segment ger en bred fördelning, så se den som en fingervisning.</span></div>`;
 
       // Serialisera klusterdata för canvas
       var clusterJson = JSON.stringify(clusters.map(function(cl) {
@@ -3283,7 +3307,7 @@ function runAnalysisCore() {
       var _nameAclean2 = (_nameAdna || nameA).replace(/\s*\(f\..*\)/, '').replace(/[*†°<>]+/g,'').trim().toLowerCase();
       var _clStr = escH(JSON.stringify(clusters.map(function(cl){
         return {chr:cl.chr, start:+cl.start.toFixed(1), end:+cl.end.toFixed(1),
-                cm:cl.cm?+cl.cm.toFixed(1):0, n:cl.names.length,
+                cm:cl.cm?+cl.cm.toFixed(1):0, mcm:cl.mcm?+cl.mcm.toFixed(1):0, T:(state._segT||7), n:cl.names.length,
                 names:cl.names, anpar:cl.anpar,
                 hasB: cl.names.some(function(n){ return n.replace(/[*†°]+/g,'').trim().toLowerCase() === _nameBclean; }),
                 _bname: _nameBclean};
@@ -3339,7 +3363,7 @@ function runAnalysisCore() {
         anparClusters.forEach(function(cl) {
           html += `<div class="finding good" style="border-left-color:var(--yellow);margin-top:4px">
             <span style="color:var(--yellow);font-weight:700">K${cl.chr} ${cl.start.toFixed(1)}–${cl.end.toFixed(1)} Mb</span>
-            · ${cl.names.length} träffar · ${escH(cl.anpar.join(' · '))}
+            · ${cl.names.length} träffar · ${escH(cl.anpar.join(' · '))}${cl.mcm ? ' · <span style="color:var(--muted)">' + genSummaryText(estimateGenerations(cl.mcm, state._segT||7)) + '</span>' : ''}
           </div>`;
         });
       }
@@ -3912,7 +3936,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.1.35';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.2.01';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -3948,9 +3972,9 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.1.35</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.2.01</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v1.1.35 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v1.2.01 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
   const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
@@ -3970,7 +3994,7 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.1.35\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.2.01\n${'='.repeat(50)}\n\n` + tmp.innerText;
   const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
   const chosenTxt = prompt('Exportera som text:', suggestedTxt);
   if (chosenTxt === null) return;
@@ -5171,13 +5195,14 @@ function buildSegmentClusters(matches) {
     segs.forEach(function(s) {
       if (!cur || s.start >= cur.end) {
         // Nytt kluster
-        cur = { start: s.start, end: s.end, cm: s.cm, nameSet: {} };
+        cur = { start: s.start, end: s.end, cm: s.cm, nameSet: {}, cms: [] };
         clusters.push(cur);
       } else {
         // Utöka aktivt kluster
         cur.end = Math.max(cur.end, s.end);
         cur.cm  = Math.max(cur.cm,  s.cm);
       }
+      if (s.cm > 0) cur.cms.push(s.cm);
       cur.nameSet[s.matchName] = true;
     });
 
@@ -5206,7 +5231,7 @@ function buildSegmentClusters(matches) {
       });
       var sharedAnpar = Object.keys(anparCount).filter(function(k){ return anparCount[k] >= 2; });
 
-      results.push({ chr: chrKey, start: cl.start, end: cl.end, cm: cl.cm, names: names, anpar: sharedAnpar });
+      results.push({ chr: chrKey, start: cl.start, end: cl.end, cm: cl.cm, mcm: medianOf(cl.cms), names: names, anpar: sharedAnpar });
     });
   });
 
@@ -5215,6 +5240,81 @@ function buildSegmentClusters(matches) {
     return ca!==cb ? ca-cb : a.start-b.start;
   });
   return results;
+}
+
+// ═══════════════════════════════════════════════
+// GENERATIONSUPPSKATTNING PER SEGMENT (v1.2.01)
+// ═══════════════════════════════════════════════
+// Modell: ett segment ärvt från gemensam anfader över n meioser har längd ~ Exp(medel 100/n cM).
+// Eftersom bara segment ≥ tröskeln T syns blir fördelningen en förskjuten exponential:
+//   f(L | n) = (n/100) · exp(-n·(L−T)/100),  L ≥ T.
+// n = meioser mellan de två jämförda personerna; g = n/2 generationer till gemensam anfader
+// (om båda ligger lika långt ned). Likformigt prior över g = 1..GEN_MAX. Ett enskilt segment
+// ger en bred fördelning — kurvan visar osäkerheten, inte ett facit.
+var GEN_MAX = 15;
+
+function medianOf(arr) {
+  if (!arr || !arr.length) return null;
+  var a = arr.slice().sort(function(x, y){ return x - y; });
+  var m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+// Segmenttröskel: minsta cM i datamängden, begränsad till 3–8 (standard 7)
+function computeSegThreshold(matches) {
+  var mn = Infinity;
+  (matches || []).forEach(function(m) {
+    (m.testers || []).forEach(function(t) {
+      (t.segments || []).forEach(function(s) { if (s.cm > 0 && s.cm < mn) mn = s.cm; });
+    });
+  });
+  if (!isFinite(mn)) return 7;
+  return Math.max(3, Math.min(8, Math.floor(mn)));
+}
+
+// Returnerar { p:[sannolikhet per g=1..GEN_MAX], mode, lo, hi } eller null
+function estimateGenerations(cm, T) {
+  if (!(cm > 0)) return null;
+  T = T || 7;
+  var L = Math.max(cm, T);
+  var like = [], tot = 0, g;
+  for (g = 1; g <= GEN_MAX; g++) {
+    var n = 2 * g;
+    var v = (n / 100) * Math.exp(-n * (L - T) / 100);
+    like.push(v); tot += v;
+  }
+  var p = like.map(function(v){ return v / tot; });
+  var mode = 1, best = -1, cum = 0, lo = null, hi = null;
+  for (g = 1; g <= GEN_MAX; g++) {
+    var pg = p[g - 1];
+    if (pg > best) { best = pg; mode = g; }
+    cum += pg;
+    if (lo === null && cum >= 0.10) lo = g;
+    if (hi === null && cum >= 0.90) hi = g;
+  }
+  return { p: p, mode: mode, lo: lo, hi: hi };
+}
+
+// Liten SVG-stapelkurva (g = 1..GEN_MAX), toppen markerad
+function genCurveSvg(est) {
+  var W = 210, H = 46, bw = W / GEN_MAX, mx = Math.max.apply(null, est.p);
+  var out = '<svg width="' + W + '" height="' + (H + 12) + '" viewBox="0 0 ' + W + ' ' + (H + 12) + '" style="display:block;margin:4px 0 2px">';
+  est.p.forEach(function(pg, i) {
+    var h = Math.max(1, (pg / mx) * H);
+    var isMode = (i + 1) === est.mode;
+    var inRange = (i + 1) >= est.lo && (i + 1) <= est.hi;
+    out += '<rect x="' + (i * bw + 1) + '" y="' + (H - h) + '" width="' + (bw - 2) + '" height="' + h + '"'
+         + ' fill="' + (isMode ? '#eda100' : '#2a78d6') + '" opacity="' + (inRange ? 0.9 : 0.35) + '"></rect>';
+    if ((i + 1) % 2 === 1 || i === GEN_MAX - 1) {
+      out += '<text x="' + (i * bw + bw / 2) + '" y="' + (H + 10) + '" text-anchor="middle" font-size="8" fill="#8899aa">' + (i + 1) + '</text>';
+    }
+  });
+  return out + '</svg>';
+}
+
+function genSummaryText(est) {
+  if (!est) return '';
+  return 'ca ' + est.mode + (est.mode === 1 ? ' generation' : ' generationer') + ' (80 %: ' + est.lo + '–' + est.hi + ')';
 }
 
 // ═══════════════════════════════════════════════
@@ -5419,7 +5519,15 @@ function clShowTip(circle) {
         var nc = n.replace(/[^a-zåäö]/gi,'').toLowerCase();
         return (cl.hasB && _bn && nc.indexOf(_bn) >= 0)
           ? '<strong style="color:#d0e8ff">'+n+'</strong>' : n;
-      }).join(', ') + '</span>';
+      }).join(', ') + '</span>'
+    + (function() {
+        var est = estimateGenerations(cl.mcm || cl.cm, cl.T);
+        if (!est) return '';
+        return '<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:5px">'
+          + '<span style="color:#eda100;font-weight:700">Generationsdjup: ' + genSummaryText(est) + '</span>'
+          + genCurveSvg(est)
+          + '<span style="font-size:10px;color:var(--muted,#8899aa)">Sannolikhet per generation till gemensam anfader (baserat på ' + (cl.mcm || cl.cm) + ' cM)</span></div>';
+      })();
 }
 function clHideTip(circle) {
   var tipId = circle.getAttribute('data-tip');
