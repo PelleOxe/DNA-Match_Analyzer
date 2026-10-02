@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DNA-Match Analyzer v1.2.01</title>
+<title>DNA-Match Analyzer v1.2.12</title>
 <meta name="theme-color" content="#1a1a2e">
 <style>
   :root {
@@ -262,6 +262,12 @@
   .analysis-block { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
   .analysis-block h3 { font-size: 13px; color: var(--gold); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
   .analysis-result { font-size: 13px; line-height: 1.7; color: var(--text); }
+  .analysis-block.collapsible > h3 { cursor: pointer; user-select: none; }
+  .analysis-block.collapsible > h3::before { content: '▾'; color: var(--muted); font-size: 12px; width: 12px; display: inline-block; }
+  .analysis-block.collapsible.collapsed > h3::before { content: '▸'; }
+  .analysis-block.collapsible.collapsed > h3 { margin-bottom: 0; }
+  .analysis-block.collapsed > .analysis-result { display: none; }
+  .analysis-block.collapsible > h3:hover { filter: brightness(1.2); }
   .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; margin: 2px; }
   .tag-green { background: rgba(76,175,125,0.2); color: var(--green); border: 1px solid var(--green); }
   .tag-yellow { background: rgba(240,192,64,0.15); color: var(--yellow); border: 1px solid var(--yellow); }
@@ -335,6 +341,11 @@
     .seg-table th { background: #e8e8f0 !important; color: #111 !important;
                     padding: 2pt 5pt !important; }
     .seg-table td { padding: 2pt 5pt !important; border-bottom: 0.5pt solid #ddd !important; }
+
+    /* 8b. Kollapsade avsnitt skrivs alltid ut */
+    .analysis-block.collapsed > .analysis-result { display: block !important; }
+    .analysis-block.collapsible > h3::before { content: none !important; }
+    #analysis-collapse-bar { display: none !important; }
 
     /* 9. Hide UI buttons inside analysis output */
     #analysisOutput button, #analysisOutput .action-row,
@@ -443,7 +454,7 @@
     <div class="dna-icon">🧬</div>
     <div>
       <div class="app-title">DNA-Match Analyzer</div>
-      <div class="app-version">v1.2.01</div>
+      <div class="app-version">v1.2.12</div>
     </div>
   </div>
   <div class="header-actions">
@@ -749,6 +760,10 @@
       <button class="btn btn-secondary" onclick="document.getElementById('loadSessionFile').click()">📂 Ladda session</button>
       <button class="btn btn-secondary" onclick="App.clearSession()">🗑 Rensa allt</button>
     </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--muted);margin-top:10px;cursor:pointer">
+      <input type="checkbox" id="sessEmbedGedcom" style="margin-top:2px">
+      <span>Bädda in GEDCOM-filerna i sessionsfilen (större fil, men kopplingen återställs även på en annan dator). Utan detta sparas filnamn + vald person, och filerna hämtas ur webbläsarens lokala cache eller laddas om manuellt.</span>
+    </label>
   </div>
 
   <div class="card">
@@ -791,7 +806,7 @@
   <div class="card">
     <div class="card-title">ℹ Om DNA-Match Analyzer</div>
     <div class="session-info">
-      <strong>Version:</strong> 1.2.01<br>
+      <strong>Version:</strong> 1.2.12<br>
       <strong>Analysmoduler:</strong> Relationsuppskattning · Gemensamma träffar · Konsistenskontroll · Geografisk-temporal analys · Grenananalys · Barn utan far<br>
       <strong>Format:</strong> GEDCOM 5.5 · MyHeritage CSV · FamilyTreeDNA CSV · Sparning som JSON<br><br>
       DNA-intervaller baseras på Blaine Bettingers MRCA-tabeller och ISOGG-data.<br>
@@ -895,6 +910,13 @@
         </select>
       </div>
       <div class="field" style="margin:0">
+        <label>Person A-spår</label>
+        <select id="chr-filter-track" onchange="renderChromosomeMap()">
+          <option value="on">Visa täckning &amp; sida</option>
+          <option value="off">Dölj</option>
+        </select>
+      </div>
+      <div class="field" style="margin:0">
         <label>Min segment-storlek (cM)</label>
         <input type="number" id="chr-filter-mincm" value="7" min="0" step="1" style="width:80px" onchange="renderChromosomeMap()">
       </div>
@@ -934,7 +956,7 @@ const state = {
   motherName: 'Ulla',
   testers: [],   // [{name, branch, note}]
   motherNameSetByUser: false,
-  version: '1.2.01'
+  version: '1.2.12'
 };
 
 // Global namespace — filled at end of script
@@ -1136,39 +1158,168 @@ function extractYear(dateStr) {
 // ═══════════════════════════════════════════════
 // GEDCOM LOAD
 // ═══════════════════════════════════════════════
+// ── GEDCOM-koppling i sessionen (v1.2.12) ───────────────────────────
+// Sessionen sparar vilka GEDCOM-filer (namn + fingeravtryck) och vilka personer (ID) som var valda.
+// Vid inläsning återställs kopplingen från (1) redan laddad fil, (2) inbäddad text i sessionen,
+// (3) webbläsarens lokala cache (IndexedDB) eller (4) väntar tills du laddar rätt fil.
+state.gedcomMeta = state.gedcomMeta || {};        // { A:{fileName,size,fp,persons}, B:{...} }
+state.gedcomRaw = state.gedcomRaw || {};          // rå GEDCOM-text, behövs för inbäddning
+state._pendingGedcom = state._pendingGedcom || {};
+
+function gedcomFingerprint(parsed) {
+  var str = parsed.persons.length + '|';
+  var n = parsed.persons.length, pick = [];
+  for (var i = 0; i < Math.min(n, 150); i++) pick.push(parsed.persons[i]);
+  for (var j = Math.max(150, n - 50); j < n; j++) pick.push(parsed.persons[j]);
+  pick.forEach(function(p) { str += p.id + ':' + p.name + ';'; });
+  var h = 5381;
+  for (var k = 0; k < str.length; k++) h = ((h << 5) + h + str.charCodeAt(k)) | 0;
+  return n + '-' + (h >>> 0).toString(36);
+}
+
+// Lokal cache av GEDCOM-text (IndexedDB), nyckel = fingeravtryck. Behåller de 6 senaste.
+function gedcomIdb(fn) {
+  return new Promise(function(resolve) {
+    try {
+      if (typeof indexedDB === 'undefined') return resolve(null);
+      var rq = indexedDB.open('dnaMatchGedcom', 1);
+      rq.onupgradeneeded = function() { rq.result.createObjectStore('g', { keyPath: 'fp' }); };
+      rq.onerror = function() { resolve(null); };
+      rq.onsuccess = function() {
+        var db = rq.result;
+        try { fn(db, function(v) { try { db.close(); } catch(e) {} resolve(v); }); }
+        catch(e) { try { db.close(); } catch(e2) {} resolve(null); }
+      };
+    } catch(e) { resolve(null); }
+  });
+}
+function gedcomCachePut(rec) {
+  return gedcomIdb(function(db, done) {
+    var tx = db.transaction('g', 'readwrite'), st = tx.objectStore('g');
+    st.put(rec);
+    var all = st.getAll();
+    all.onsuccess = function() {
+      var rows = (all.result || []).sort(function(a, b) { return b.savedAt - a.savedAt; });
+      rows.slice(6).forEach(function(r) { st.delete(r.fp); });
+    };
+    tx.oncomplete = function() { done(true); };
+    tx.onerror = function() { done(null); };
+  });
+}
+function gedcomCacheGet(fp, fileName) {
+  return gedcomIdb(function(db, done) {
+    var rq = db.transaction('g').objectStore('g').getAll();
+    rq.onsuccess = function() {
+      var rows = rq.result || [];
+      done(rows.find(function(r) { return r.fp === fp; })
+        || (fileName && rows.find(function(r) { return r.fileName === fileName; })) || null);
+    };
+    rq.onerror = function() { done(null); };
+  });
+}
+
+// Läs in GEDCOM-text för sida A/B. opts.quiet = återställning (ingen fokus/sökrensning).
+function ingestGedcom(side, text, fileName, size, opts) {
+  opts = opts || {};
+  const parsed = parseGedcom(text);
+  state['gedcom' + side] = parsed;
+  state._geoCache = null;
+  state._branchCache = null;
+  parsed.sorted = [...parsed.persons].sort((a,b) => a.name.localeCompare(b.name, 'sv'));
+  const fp = gedcomFingerprint(parsed);
+  state.gedcomMeta[side] = { fileName: fileName || '', size: size || text.length, fp: fp, persons: parsed.persons.length };
+  state.gedcomRaw[side] = text;
+  const statusEl = document.getElementById('gedcomStatus' + side);
+  const srcNote = opts.source === 'cache' ? ' · återställd från lokal cache' : opts.source === 'embedded' ? ' · inbäddad i sessionen' : '';
+  state.gedcomMeta[side].source = opts.source || 'fil';
+  statusEl.innerHTML = `<div class="dot dot-green"></div><span>${escH(fileName || 'GEDCOM')} — ${parsed.persons.length} personer inlästa${srcNote}</span>`;
+  var sbEl = document.getElementById('statusGedcom' + side);
+  if (sbEl) sbEl.innerHTML = '<span style="color:var(--green)">📁 GEDCOM ' + side + ': ' + parsed.persons.length + ' pers.</span>';
+  document.getElementById('person' + side + 'SelectWrap').style.display = 'block';
+  var statusSpan = document.getElementById('gedcom' + side + 'Status');
+  if (statusSpan) { statusSpan.textContent = '(' + parsed.persons.length + ' pers. laddade)'; statusSpan.style.color = 'var(--green)'; }
+  var note = document.getElementById('gedcomSearchNote');
+  if (note && state.gedcomA && state.gedcomB) note.style.display = 'none';
+  if (!opts.quiet) {
+    document.getElementById('person' + side + 'Search').value = '';
+    document.getElementById('person' + side + 'Selected').classList.remove('visible');
+  }
+  renderPersonList(side, '');
+  if (!opts.quiet) {
+    setTimeout(function() { document.getElementById('person' + side + 'Search').focus(); }, 50);
+  }
+  updateTriGedcomCache();
+  // Väntande sessionskoppling? (filen laddades efter sessionen)
+  var pend = state._pendingGedcom[side];
+  if (pend && (pend.fp === fp || (pend.fileName && pend.fileName === fileName) || pend.personId)) {
+    if (applyGedcomPerson(side, pend)) delete state._pendingGedcom[side];
+    else gedcomLinkNotice(side, 'Filen laddades men personen ' + (pend.personName || pend.personId) + ' hittades inte — välj om manuellt.');
+  }
+  updateSessionMeta();
+  return parsed;
+}
+
 function loadGedcom(side, input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (e) => {
-    const parsed = parseGedcom(e.target.result);
-    state['gedcom' + side] = parsed;
-    // Rensa cache — ny GEDCOM gör gamla beräkningar ogiltiga
-    state._geoCache = null;
-    state._branchCache = null;
-    // Sort persons alphabetically once, store for search
-    parsed.sorted = [...parsed.persons].sort((a,b) => a.name.localeCompare(b.name, 'sv'));
-    const statusEl = document.getElementById('gedcomStatus' + side);
-    statusEl.innerHTML = `<div class="dot dot-green"></div><span>${file.name} — ${parsed.persons.length} personer inlästa</span>`;
-    // Update status bar
-    var sbEl = document.getElementById('statusGedcom' + side);
-    if (sbEl) sbEl.innerHTML = '<span style="color:var(--green)">📁 GEDCOM ' + side + ': ' + parsed.persons.length + ' pers.</span>';
-    document.getElementById('person' + side + 'SelectWrap').style.display = 'block';
-    // Update manual input GEDCOM status
-    var statusSpan = document.getElementById('gedcom' + side + 'Status');
-    if (statusSpan) { statusSpan.textContent = '(' + parsed.persons.length + ' pers. laddade)'; statusSpan.style.color = 'var(--green)'; }
-    var note = document.getElementById('gedcomSearchNote');
-    if (note && state.gedcomA && state.gedcomB) note.style.display = 'none';
-    document.getElementById('person' + side + 'Search').value = '';
-    document.getElementById('person' + side + 'Selected').classList.remove('visible');
-    renderPersonList(side, '');
-    // Sätt fokus i sökfältet direkt
-    setTimeout(function() {
-      document.getElementById('person' + side + 'Search').focus();
-    }, 50);
-    updateTriGedcomCache();
+    const parsed = ingestGedcom(side, e.target.result, file.name, file.size, {});
+    var m = state.gedcomMeta[side];
+    gedcomCachePut({ fp: m.fp, fileName: m.fileName, size: m.size, text: e.target.result, savedAt: Date.now() });
   };
   reader.readAsText(file, 'UTF-8');
+}
+
+// Välj sparad person (ID, annars namn+födelseår) i inläst träd, utan att skriva över namnfältet
+function applyGedcomPerson(side, meta) {
+  var ged = state['gedcom' + side];
+  if (!ged || !meta || !meta.personId) return false;
+  var norm = function(x) { return String(x || '').replace(/[*†°]+/g, '').trim().toLowerCase(); };
+  var person = ged.persons.find(function(p) { return p.id === meta.personId && (!meta.personName || norm(p.name) === norm(meta.personName)); })
+            || ged.persons.find(function(p) { return norm(p.name) === norm(meta.personName) && String(p.born || '') === String(meta.personBorn || ''); });
+  if (!person) return false;
+  selectPersonResult(side, person, true);
+  return true;
+}
+function gedcomLinkNotice(side, msg) {
+  var el = document.getElementById('gedcomStatus' + side);
+  if (el) el.innerHTML = '<div class="dot dot-yellow" style="background:var(--yellow)"></div><span style="color:var(--yellow)">⚠ ' + escH(msg) + '</span>';
+  var sb = document.getElementById('statusGedcom' + side);
+  if (sb) sb.innerHTML = '<span style="color:var(--yellow)">📁 GEDCOM ' + side + ': ' + escH(msg) + '</span>';
+}
+
+// Återställ GEDCOM-kopplingen från en inläst session
+function restoreGedcomLink(data) {
+  var link = data && data.gedcom;
+  state._pendingGedcom = {};
+  if (!link) return;
+  ['A', 'B'].forEach(function(side) {
+    var meta = link[side];
+    if (!meta) return;
+    var loaded = state['gedcom' + side], cur = state.gedcomMeta[side];
+    // 1. Rätt fil redan laddad
+    if (loaded && cur && (cur.fp === meta.fp || (meta.fileName && cur.fileName === meta.fileName))) {
+      if (!applyGedcomPerson(side, meta)) gedcomLinkNotice(side, 'Personen ' + (meta.personName || meta.personId) + ' hittades inte i den laddade filen.');
+      return;
+    }
+    // 2. Inbäddad text i sessionen
+    var embedded = data.gedcomText && data.gedcomText[side];
+    if (embedded) {
+      ingestGedcom(side, embedded, meta.fileName, meta.size, { quiet: true, source: 'embedded' });
+      if (!applyGedcomPerson(side, meta)) gedcomLinkNotice(side, 'Personen ' + (meta.personName || meta.personId) + ' hittades inte.');
+      return;
+    }
+    // 3. Lokal cache, annars 4. vänta på att filen laddas
+    state._pendingGedcom[side] = meta;
+    gedcomLinkNotice(side, 'Sessionen använde ' + (meta.fileName || 'GEDCOM ' + side) + ' — ladda filen igen så återställs valet av ' + (meta.personName || 'person'));
+    gedcomCacheGet(meta.fp, meta.fileName).then(function(rec) {
+      if (!rec || !state._pendingGedcom[side]) return;       // ingen cache, eller användaren hann ladda filen själv
+      ingestGedcom(side, rec.text, rec.fileName, rec.size, { quiet: true, source: 'cache' });
+      if (!applyGedcomPerson(side, meta)) gedcomLinkNotice(side, 'Personen ' + (meta.personName || meta.personId) + ' hittades inte.');
+      else delete state._pendingGedcom[side];
+    });
+  });
 }
 
 // Build a flat sorted list for tri search
@@ -1235,7 +1386,7 @@ function openPersonSearch(side) {
   renderPersonList(side, q);
 }
 
-function selectPersonResult(side, person) {
+function selectPersonResult(side, person, keepName) {
   state['person' + side] = person;
   // Rensa branch-cache — nytt personval kräver ny beräkning
   state._branchCache = null;
@@ -1245,7 +1396,7 @@ function selectPersonResult(side, person) {
   const disp = document.getElementById('person' + side + 'Selected');
   disp.textContent = '✓ Vald: ' + person.name + (birthInfo ? ' (' + birthInfo + ')' : '');
   disp.classList.add('visible');
-  document.getElementById('name' + side).value = person.name + (person.born ? ` (f. ${person.born})` : '');
+  if (!keepName || !document.getElementById('name' + side).value) document.getElementById('name' + side).value = person.name + (person.born ? ` (f. ${person.born})` : '');
   // Omräkna sida för alla träffar när personA väljs — anträde-klassificeringen kräver GEDCOM+personA
   if (side === 'A' && state.matches.length) {
     state.matches.forEach(function(m){ computeMatchSide(m); });
@@ -1429,12 +1580,17 @@ function addOrMergeMatch(matchName, testerName, cm, segments, meta={}) {
 }
 
 function computeMatchSide(match) {
-  if (!match.testers.length) { match.side = null; return; }
+  match._sideWhy = '';
+  if (!match.testers.length) { match.side = null; match._sideWhy = 'Inga testare på träffen'; return; }
 
   var morBranches = ['mormor','morfar','mormors_far','mormors_mor'];
   var farBranches = ['farmor','farfar','farmors_far','farmors_mor'];
   // Grenar som är för generella för att särskilja sida (barn till A, eller okänd)
   var ambiguousBranches = ['mor','far'];
+  // Diakritik-fri, små bokstäver (Jönsson = Jonsson) för namnjämförelse
+  function fold(x) {
+    return String(x || '').toLowerCase().replace(/[åä]/g,'a').replace(/ö/g,'o').replace(/[éè]/g,'e').replace(/ü/g,'u');
+  }
 
   // ── Priority 1: testpersoner med SPECIFIK gren (farfar/farmor/morfar/mormor) ──
   // Exkluderar: matchparet självt (A/B), och barn med gren "mor"/"far"
@@ -1470,51 +1626,60 @@ function computeMatchSide(match) {
       var yearM = inner.match(/(\d{4})/);
       var birthYear = yearM ? parseInt(yearM[1]) : null;
       var nameOnly = inner.replace(/\d{4}[\u2013\-]\d{0,4}/g,'').replace(/\d{4}/g,'').trim().toLowerCase();
-      var nameWords = nameOnly.split(/\s+/).filter(function(w){ return w.length > 2; });
-      if (nameWords.length > 0) bracketPersons.push({ words: nameWords, year: birthYear });
+      var nameWords = nameOnly.split(/\s+/).filter(function(w){ return w.length > 2; }).map(fold);
+      if (nameWords.length > 0) bracketPersons.push({ words: nameWords, year: birthYear, label: inner });
     });
+    if (!bracketPersons.length) match._sideWhy = 'Anträdet har inga namn i [hakparenteser] (gemensamma anor)';
 
     if (bracketPersons.length > 0) {
       var branches = (state._branchCache && state._branchCache.branchesA)
                      || getBranches(state.gedcomA, state.personA.id);
       if (branches) {
+         // Returnerar poäng: 0 = ingen match, 1 = namn + födelseår stämmer (eller inget år i anträdet),
+         // 0.5 = namn stämmer men GEDCOM-personen saknar födelseår (tidigare avvisades dessa helt)
          function bpMatchesGedcom(bp, p) {
-           if (!p.name) return false;
-           var pSurname = (p.surname || '').toLowerCase().trim();
-           if (!pSurname) {
-             var pw = p.name.replace(/\*/g,'').toLowerCase().split(/\s+/).filter(function(w){ return w.length > 2; });
-             pSurname = pw.length > 0 ? pw[pw.length - 1] : '';
-           }
+           if (!p.name) return 0;
+           var cleanName = fold(p.name.replace(/\*/g,'').replace(/\/[^\/]*\//g, function(x){ return ' ' + x.replace(/\//g,'') + ' '; }));
+           var pwords = cleanName.split(/\s+/).filter(Boolean);
+           var pSurname = fold(p.surname || '').trim();
+           var lastWord = pwords.length ? pwords[pwords.length - 1] : '';
            var bpLast = bp.words.length > 0 ? bp.words[bp.words.length - 1] : null;
-           if (!bpLast || pSurname !== bpLast) return false;
-           var bpFirst = bp.words.length > 0 ? bp.words[0] : null;
-           var pwords = p.name.replace(/\*/g,'').toLowerCase().split(/\s+/);
-           if (!bpFirst || !pwords.some(function(pw){ return pw === bpFirst; })) return false;
+           if (!bpLast || (pSurname !== bpLast && lastWord !== bpLast)) return 0;
+           var bpFirst = bp.words[0];
+           if (!bpFirst || pwords.indexOf(bpFirst) < 0) return 0;
            if (bp.year) {
-             if (!p.born) return false;
              var py = parseInt(p.born);
-             if (!isNaN(py) && Math.abs(py - bp.year) > 3) return false;
+             if (isNaN(py)) return 0.5;
+             if (Math.abs(py - bp.year) > 3) return 0;
            }
-           return true;
+           return 1;
          }
         var farScore = 0, morScore = 0;
         ['farfar','farmor'].forEach(function(br) {
           (branches[br] || []).forEach(function(p) {
-            bracketPersons.forEach(function(bp) { if (bpMatchesGedcom(bp, p)) farScore++; });
+            bracketPersons.forEach(function(bp) { farScore += bpMatchesGedcom(bp, p); });
           });
         });
         ['morfar','mormor'].forEach(function(br) {
           (branches[br] || []).forEach(function(p) {
-            bracketPersons.forEach(function(bp) { if (bpMatchesGedcom(bp, p)) morScore++; });
+            bracketPersons.forEach(function(bp) { morScore += bpMatchesGedcom(bp, p); });
           });
         });
-        if (farScore > 0 && farScore >= morScore) { match.side = 'far'; return; }
-        if (morScore > 0 && morScore > farScore)  { match.side = 'mor'; return; }
+        if (farScore > morScore) { match.side = 'far'; return; }
+        if (morScore > farScore) { match.side = 'mor'; return; }
+        if (farScore > 0 && farScore === morScore) { match.side = 'both'; match._sideWhy = 'Gemensam anfader finns på båda sidor i A:s träd'; return; }
+        if (bracketPersons.length) match._sideWhy = 'Ingen av [' + bracketPersons.map(function(b){ return b.label; }).join('], [') + '] hittades bland A:s farfar/farmor/morfar/mormor-grenar';
+      } else {
+        match._sideWhy = 'Person A saknar föräldrar/morföräldrar i GEDCOM — inga grenar att jämföra mot';
       }
     }
   }
 
   // ── Priority 3: okänd sida — inte tillräckligt med information ──
+  if (!match._sideWhy) {
+    match._sideWhy = !(match.antrade && match.antrade.trim()) ? 'Anträde saknas'
+                   : !(state.gedcomA && state.personA) ? 'GEDCOM A / Person A är inte vald' : 'Okänd';
+  }
   match.side = null;
 }
 
@@ -2003,7 +2168,7 @@ function renderMatchCard(m, idx, overlapMap) {
       ? '<span class="side-tag side-far" title="' + escH(ownName) + ' matchar, ' + (state.motherName||'Ulla') + ' matchar ej">' + (ownName ? escH(ownName) + 's' : '') + ' fars sida</span>'
       : m.side === 'both'
         ? '<span class="side-tag" style="background:rgba(180,130,220,0.2);color:#b482dc;border:1px solid #b482dc">Båda sidor?</span>'
-        : '<span class="side-tag side-unknown">Sida okänd</span>';
+        : '<span class="side-tag side-unknown" title="' + escH(m._sideWhy || '') + '">Sida okänd</span>';
 
   const testerBadges = m.testers.map(t => {
     const color = testerColor(t.name);
@@ -2182,8 +2347,10 @@ function lookupGedcomAlias(idx) {
   const alias = (m.alias || '').trim();
   if (!alias) { alert('Ange ett namn i alias-fältet först.'); return; }
 
-  const ged = state.gedcomA;
-  if (!ged) { alert('Ingen GEDCOM för A är laddad.'); return; }
+  const trees = [];
+  if (state.gedcomA) trees.push({ src: 'A', ged: state.gedcomA });
+  if (state.gedcomB) trees.push({ src: 'B', ged: state.gedcomB });
+  if (!trees.length) { alert('Ingen GEDCOM är laddad (varken A eller B).'); return; }
 
   const resultEl = document.getElementById('alias_result_' + idx);
   const previewEl = document.getElementById('alias_preview_' + idx);
@@ -2193,13 +2360,19 @@ function lookupGedcomAlias(idx) {
   const aParts = aClean.split(/\s+/);
 
   // Sök — kräv att ALLA delar av söktermen finns i namnet
-  const candidates = ged.persons.filter(function(p) {
-    const pn = (p.name||'').toLowerCase().replace(/[^a-zåäö ]/gi,'').trim();
-    return aParts.every(function(part) { return pn.includes(part); });
+  const candidates = [];
+  trees.forEach(function(t) {
+    t.ged.persons.forEach(function(p) {
+      const pn = (p.name||'').toLowerCase().replace(/[^a-zåäö ]/gi,'').trim();
+      if (aParts.every(function(part) { return pn.includes(part); })) {
+        candidates.push({ id: p.id, name: p.name, born: p.born, died: p.died, src: t.src });
+      }
+    });
   });
+  const _bothTrees = trees.length > 1;
 
   if (!candidates.length) {
-    if (resultEl) resultEl.innerHTML = '⚠ Hittades inte i GEDCOM A — kontrollera stavning';
+    if (resultEl) resultEl.innerHTML = '⚠ Hittades inte i ' + (_bothTrees ? 'GEDCOM A eller B' : 'GEDCOM ' + trees[0].src) + ' — kontrollera stavning';
     if (previewEl) previewEl.style.display = 'none';
     m.aliasFound = false;
     return;
@@ -2208,9 +2381,9 @@ function lookupGedcomAlias(idx) {
   // Om flera kandidater — visa lista att välja bland
   if (candidates.length > 1) {
     // Spara kandidater för val
-    window['_gedCandidates_' + idx] = candidates.slice(0, 8).map(function(p){ return { id: p.id, name: p.name, born: p.born, died: p.died }; });
+    window['_gedCandidates_' + idx] = candidates.slice(0, 8).map(function(p){ return { id: p.id, name: p.name, born: p.born, died: p.died, src: p.src }; });
     var opts = candidates.slice(0, 8).map(function(p, i) {
-      var label = escH(p.name||'') + (p.born ? ' f.' + p.born : '') + (p.died ? ' d.' + p.died : '');
+      var label = (_bothTrees ? '[' + p.src + '] ' : '') + escH(p.name||'') + (p.born ? ' f.' + p.born : '') + (p.died ? ' d.' + p.died : '');
       return '<div style="margin:2px 0"><button class="btn btn-secondary btn-sm" style="text-align:left;font-size:11px;width:100%" '
         + 'data-idx="' + idx + '" data-ci="' + i + '" onclick="App.pickGedcomCandidate(this)">'
         + label + '</button></div>';
@@ -2221,12 +2394,12 @@ function lookupGedcomAlias(idx) {
   }
 
   // Exakt en träff — bygg och visa förhandsgranskning
-  gedcomBuildPreview(idx, candidates[0].id);
+  gedcomBuildPreview(idx, candidates[0].id, candidates[0].src);
 }
 
 // Bygg härstamningslinje uppåt från en person och visa förhandsgranskning
-function gedcomBuildPreview(idx, personId) {
-  const ged = state.gedcomA;
+function gedcomBuildPreview(idx, personId, src) {
+  const ged = (src === 'B') ? state.gedcomB : state.gedcomA;
   const m = state.matches[idx];
   if (!ged || !m) return;
 
@@ -2259,17 +2432,26 @@ function gedcomBuildPreview(idx, personId) {
   var person0 = chain[chain.length - 1]; // den sökta personen
 
   // Visa förhandsgranskning
-  if (resultEl) resultEl.innerHTML = '✓ Hittad: <strong>' + escH(person0.name||'') + '</strong>'
+  if (resultEl) resultEl.innerHTML = '✓ Hittad' + (src === 'B' ? ' i B:s träd' : (state.gedcomB ? ' i A:s träd' : '')) + ': <strong>' + escH(person0.name||'') + '</strong>'
     + (person0.born ? ' f.' + person0.born : '');
 
   if (previewEl) {
     previewEl.style.display = 'block';
-    previewEl.innerHTML =
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">Förhandsvisning av anträde:</div>'
+    var existing = (m.antrade || '').trim();
+    var hasExisting = existing && existing !== antradeStr;
+    var warnHtml = '';
+    if (hasExisting) {
+      var oldLen = existing.split(' / ').length, newLen = parts.length;
+      warnHtml = '<div style="font-size:11px;background:rgba(240,192,64,0.1);border:1px solid var(--yellow);border-radius:4px;padding:6px 8px;color:var(--yellow);margin-bottom:6px;line-height:1.5">'
+        + '⚠ Kortet har redan ett anträde (' + oldLen + ' led' + (oldLen > newLen ? ', längre än förslaget på ' + newLen + ' led' : '') + ') som ersätts om du fortsätter.'
+        + '<div style="color:var(--muted);margin-top:3px;word-break:break-word">Nuvarande: ' + escH(existing.length > 180 ? existing.slice(0, 180) + '…' : existing) + '</div></div>';
+    }
+    previewEl.innerHTML = warnHtml
+      + '<div style="font-size:11px;color:var(--muted);margin-bottom:5px">Förhandsvisning av anträde:</div>'
       + '<div style="font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);line-height:1.6;white-space:pre-wrap;word-break:break-word;margin-bottom:6px">'
       + escH(antradeStr) + '</div>'
       + '<div style="display:flex;gap:8px">'
-      + '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();App.applyGedcomAlias(' + idx + ',' + JSON.stringify(antradeStr) + ')">✓ Använd detta anträde</button>'
+      + '<button class="btn ' + (hasExisting ? 'btn-secondary' : 'btn-primary') + ' btn-sm" onclick="event.stopPropagation();App.applyGedcomAlias(' + idx + ',' + JSON.stringify(antradeStr) + ')">' + (hasExisting ? '↻ Ersätt befintligt anträde' : '✓ Använd detta anträde') + '</button>'
       + '<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();document.getElementById(\'alias_preview_' + idx + '\').style.display=\'none\'">Avbryt</button>'
       + '</div>';
     setTimeout(function() { previewEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 60);
@@ -2285,17 +2467,17 @@ function pickGedcomCandidate(btn) {
   // Markera vald
   btn.closest('[id^="alias_preview_"]') && btn.closest('[id^="alias_preview_"]').querySelectorAll('button').forEach(function(b){ b.classList.remove('btn-primary'); b.classList.add('btn-secondary'); });
   btn.classList.remove('btn-secondary'); btn.classList.add('btn-primary');
-  selectGedcomCandidate(idx, candidates[ci].id);
+  selectGedcomCandidate(idx, candidates[ci].id, candidates[ci].src);
 }
 
-function selectGedcomCandidate(idx, personId) {
+function selectGedcomCandidate(idx, personId, src) {
   const previewEl = document.getElementById('alias_preview_' + idx);
   if (previewEl) { previewEl.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:4px">Hämtar...</div>'; previewEl.style.display = 'block'; }
   // Markera vald knapp
   document.querySelectorAll('[data-matchidx="'+idx+'"]').forEach(function(b){ b.style.background=''; b.style.fontWeight=''; });
   var btn = document.querySelector('[data-matchidx="'+idx+'"][data-personid="'+personId.replace(/"/g,'')+'"]');
   if (btn) { btn.style.background='var(--accent2)'; btn.style.fontWeight='700'; }
-  setTimeout(function(){ gedcomBuildPreview(idx, personId); }, 30);
+  setTimeout(function(){ gedcomBuildPreview(idx, personId, src); }, 30);
 }
 
 function applyGedcomAlias(idx, antradeStr) {
@@ -2718,15 +2900,17 @@ function getBranches(gedcom, personId) {
   }
 
   // Get all ancestors on a given branch as flat array
-  var _visitedAncestors = new Set(); // skydd mot cirkelreferenser i GEDCOM
-  function getAncestors(p, depth) {
+  // Cirkelskydd per gren (seen skickas med nedåt). Tidigare delades ett set mellan alla
+  // fyra grenar, så en anfader som finns på flera sidor (anavel) hamnade bara på den första.
+  function getAncestors(p, depth, seen) {
     if (!p || depth > 12) return [];
-    if (_visitedAncestors.has(p.id)) return []; // cirkelskydd
-    _visitedAncestors.add(p.id);
+    seen = seen || new Set();
+    if (seen.has(p.id)) return []; // cirkelskydd
+    seen.add(p.id);
     var results = [p];
     var parents = getParents(p);
-    if (parents.father) results = results.concat(getAncestors(parents.father, depth+1));
-    if (parents.mother) results = results.concat(getAncestors(parents.mother, depth+1));
+    if (parents.father) results = results.concat(getAncestors(parents.father, depth+1, seen));
+    if (parents.mother) results = results.concat(getAncestors(parents.mother, depth+1, seen));
     return results;
   }
 
@@ -2739,10 +2923,10 @@ function getBranches(gedcom, personId) {
   var motherParents = rootParents.mother ? getParents(rootParents.mother) : { father: null, mother: null };
 
   return {
-    farfar: fatherParents.father ? getAncestors(fatherParents.father, 0) : [],
-    farmor: fatherParents.mother ? getAncestors(fatherParents.mother, 0) : [],
-    morfar: motherParents.father ? getAncestors(motherParents.father, 0) : [],
-    mormor: motherParents.mother ? getAncestors(motherParents.mother, 0) : [],
+    farfar: fatherParents.father ? getAncestors(fatherParents.father, 0, new Set()) : [],
+    farmor: fatherParents.mother ? getAncestors(fatherParents.mother, 0, new Set()) : [],
+    morfar: motherParents.father ? getAncestors(motherParents.father, 0, new Set()) : [],
+    mormor: motherParents.mother ? getAncestors(motherParents.mother, 0, new Set()) : [],
     far:    rootParents.father ? [rootParents.father] : [],
     mor:    rootParents.mother ? [rootParents.mother] : []
   };
@@ -3137,6 +3321,7 @@ function runAnalysisCore() {
         + (lowN    ? `<span class="tag">${lowN} låg</span>` : '')
         + `</div>`;
       // Visa hög-konfidenspar detaljerat, medel/låg komprimerat
+      gedResults.forEach((r, ri) => { r._k = ri; });
       const highPairs = gedResults.filter(r => r.conf === 'high');
       const medPairs  = gedResults.filter(r => r.conf === 'medium');
       const lowPairs  = gedResults.filter(r => r.conf === 'low');
@@ -3150,7 +3335,7 @@ function runAnalysisCore() {
           const tags = r.reasons.map(rs => `<span class="tag">${escH(rs)}</span>`).join(' ');
           html += `<div class="finding good" style="margin-bottom:6px">
             <strong>${escH(r.pA.name)}${escH(bA)}${escH(plA)}</strong> <span style="color:var(--muted)">⟷</span> <strong>${escH(r.pB.name)}${escH(bB)}${escH(plB)}</strong>
-            <div style="margin-top:4px;font-size:11px">${tags}</div>
+            <div style="margin-top:4px;font-size:11px">${tags}</div><!--GC${r._k}-->
           </div>`;
         });
         if (highPairs.length > 20) html += `<div style="font-size:11px;color:var(--muted)">… och ${highPairs.length - 20} till med hög konfidensˢ.</div>`;
@@ -3160,7 +3345,7 @@ function runAnalysisCore() {
         html += medPairs.slice(0, 10).map(r => {
           const bA = r.pA.born ? ' f.' + r.pA.born : '';
           const bB = r.pB.born ? ' f.' + r.pB.born : '';
-          return `<div style="font-size:12px;color:var(--text);margin-bottom:3px">${escH(r.pA.name)}${escH(bA)} ⟷ ${escH(r.pB.name)}${escH(bB)} <span style="color:var(--muted);font-size:11px">(${r.score}p)</span></div>`;
+          return `<div style="font-size:12px;color:var(--text);margin-bottom:3px">${escH(r.pA.name)}${escH(bA)} ⟷ ${escH(r.pB.name)}${escH(bB)} <span style="color:var(--muted);font-size:11px">(${r.score}p)</span><!--GC${r._k}--></div>`;
         }).join('');
         if (medPairs.length > 10) html += `<div style="font-size:11px;color:var(--muted)">… och ${medPairs.length - 10} till med medel konfidensˢ.</div>`;
       }
@@ -3192,7 +3377,7 @@ function runAnalysisCore() {
   html += `</div></div>`;
 
   // ── 2. GEMENSAMMA TRÄFFAR & TRIANGULERING ──
-  html += `<div class="analysis-block"><h3>🧩 3. Gemensamma DNA-träffar & triangulering</h3><div class="analysis-result">`;
+  html += `<div class="analysis-block"><h3>🧩 3a. Gemensamma DNA-träffar & triangulering</h3><div class="analysis-result">`;
   if (!state.matches.length) {
     html += `<div class="finding">Inga gemensamma DNA-träffar inlagda.</div>`;
   } else {
@@ -3270,11 +3455,12 @@ function runAnalysisCore() {
       console.error('[DNA] Kluster-krasch:', e.message);
     }
     if (clusters.length) {
-      html += `<div style="margin-top:14px;font-size:12px;font-weight:700;color:var(--accent2);border-top:1px solid var(--border);padding-top:10px;margin-bottom:4px">
-        🔵 Segmentkluster — troliga gemensamma anpar</div>`;
+      // Stäng 3a och öppna 3b som eget avsnitt
+      html += `</div></div>`;
+      html += `<div class="analysis-block"><h3>🔵 3b. Segmentkluster — troliga gemensamma anpar</h3><div class="analysis-result">`;
       html += `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">
-        Bubbelstorlek = antal träffar. Färg: <span style="color:#2a78d6">■</span> 2 träffar &nbsp;<span style="color:#eda100">■</span> 3–4 &nbsp;<span style="color:#eb6834">■</span> 5–9 &nbsp;<span style="color:#e34948">■</span> 10+.
-        Hovra över en bubbla för att se vilka individer som ingår samt en uppskattning av generationsdjupet.
+        Bubbelstorlek = antal träffar. Färg: <span style="color:#2a78d6">■</span> 2 träffar &nbsp;<span style="color:#eda100">■</span> 3–4 &nbsp;<span style="color:#eb6834">■</span> 5–9 &nbsp;<span style="color:#e34948">■</span> 10–15 &nbsp;<span style="color:#9b5de5">■</span> 16+. Låst bubbla = <span style="color:#39ff14">◌</span> grön streckad ring; vit ring = Person B ingår.
+        Varje bubbla är en grupp träffar vars segment överlappar varandra i ett gemensamt område (positionen i hovertexten är det gemensamma överlappet, cM = längsta enskilda segment). Hovra över en bubbla för att se vilka individer som ingår samt en uppskattning av generationsdjupet. Klicka på en bubbla för att låsa informationen — klicka igen för att släppa.
         <br><span style="font-size:10px">Generationskurvan bygger på segmentets längd (median-cM i klustret, tröskel ${state._segT||7} cM) — ett enskilt segment ger en bred fördelning, så se den som en fingervisning.</span></div>`;
 
       // Serialisera klusterdata för canvas
@@ -3293,7 +3479,7 @@ function runAnalysisCore() {
       _maxCm = Math.ceil((_maxCm + 20) / 20) * 20;
 
       function _nCol(n, alpha) {
-        var rgb = n>=10 ? '227,73,72' : n>=5 ? '235,104,52' : n>=3 ? '237,161,0' : '42,120,214';
+        var rgb = n>=16 ? '155,93,229' : n>=10 ? '227,73,72' : n>=5 ? '235,104,52' : n>=3 ? '237,161,0' : '42,120,214';
         return 'rgba('+rgb+','+(alpha||1)+')';
       }
       function _px(chr){ return _PL + ((+chr - 0.5) / 23) * _tw; }
@@ -3303,13 +3489,26 @@ function runAnalysisCore() {
       // Serialisera för onclick/onmouseover
       var _nameBdna = (document.getElementById('nameBdna').value || '').trim();
       var _nameAdna = (document.getElementById('nameAdna').value || '').trim();
+      var _bNames = [(_nameBdna || nameB)];
+      state.matches.forEach(function(m){ if (m.isPersonB) _bNames.push(m.name); });
+      var _isB = function(n){ return _bNames.some(function(b){ return sameNamePerson(n, b); }); };
       var _nameBclean = (_nameBdna || nameB).replace(/\s*\(f\..*\)/, '').replace(/[*†°<>]+/g,'').trim().toLowerCase();
       var _nameAclean2 = (_nameAdna || nameA).replace(/\s*\(f\..*\)/, '').replace(/[*†°<>]+/g,'').trim().toLowerCase();
+      // v1.2.12: koppla kluster med känt anpar till GEDCOM-jämförelsen (kräver båda träden)
+      confirmClustersViaGedcom(clusters, state._gedcompResults || []);
+      (state._gedcompResults || []).forEach(function(r) {
+        if (!r._conf || !r._conf.length) return;
+        var top = r._conf.slice(0, 3).map(function(c) {
+          return 'K' + c.chr + ' ' + c.start.toFixed(1) + '–' + c.end.toFixed(1) + ' Mb · ' + c.n + ' träffar (' + escH(c.person) + ')';
+        }).join('<br>');
+        html = html.replace('<!--GC' + r._k + '-->',
+          '<div style="margin-top:4px;font-size:11px"><span class="tag tag-green">★ bekräftat via segment</span> <span style="color:var(--muted)">' + top + '</span></div>');
+      });
       var _clStr = escH(JSON.stringify(clusters.map(function(cl){
         return {chr:cl.chr, start:+cl.start.toFixed(1), end:+cl.end.toFixed(1),
                 cm:cl.cm?+cl.cm.toFixed(1):0, mcm:cl.mcm?+cl.mcm.toFixed(1):0, T:(state._segT||7), n:cl.names.length,
                 names:cl.names, anpar:cl.anpar,
-                hasB: cl.names.some(function(n){ return n.replace(/[*†°]+/g,'').trim().toLowerCase() === _nameBclean; }),
+                hasB: cl.names.some(_isB), bn: cl.names.filter(_isB), conf: cl.conf || [],
                 _bname: _nameBclean};
       })));
 
@@ -3318,9 +3517,15 @@ function runAnalysisCore() {
 
       // SVG-cirklar
       var circles = '';
-      clusters.forEach(function(cl, i) {
+      // v1.2.12: ritordning stor → liten så att små bubblor hamnar överst och går att hovra/klicka
+      // (tidigare dolde en stor bubbla de mindre som låg inuti den). data-i behåller ursprungligt index.
+      var _drawOrder = clusters.map(function(c, ix) { return ix; }).sort(function(x, y) {
+        return clusters[y].names.length - clusters[x].names.length || x - y;
+      });
+      _drawOrder.forEach(function(i) {
+        var cl = clusters[i];
         var cx = _px(cl.chr), cy = _py(cl.cm), r = _r(cl.names.length);
-        var _hasB = clusters[i] && clusters[i].names.some(function(n){ return n.replace(/[*†°]+/g,'').trim().toLowerCase() === _nameBclean; });
+        var _hasB = clusters[i] && clusters[i].names.some(_isB);
         // Rita vit ring-cirkel BAKOM den färgade (synlig i alla browsers)
         if (_hasB) {
           circles += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+3)+'" fill="none" stroke="white" stroke-width="2.5" opacity="0.9"></circle>';
@@ -3328,8 +3533,15 @@ function runAnalysisCore() {
         circles += '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'"'
           + ' fill="'+_nCol(cl.names.length,0.75)+'" stroke="'+_nCol(cl.names.length,1)+'" stroke-width="1.5"'
           + ' data-i="'+i+'" data-tip="'+_tipId+'" style="cursor:pointer"'
-          + ' onmouseenter="clShowTip(this)" onmouseleave="clHideTip(this)">';
+          + ' onmouseenter="clShowTip(this)" onmouseleave="clHideTip(this)" onclick="clTogglePin(this)">';
         circles += '</circle>';
+      });
+
+      // ★ över kluster som är bekräftade via segment + GEDCOM
+      clusters.forEach(function(cl) {
+        if (cl.conf && cl.conf.length) {
+          circles += '<text x="' + _px(cl.chr) + '" y="' + (_py(cl.cm) - _r(cl.names.length) - 5) + '" text-anchor="middle" font-size="13" fill="#f0c040" style="pointer-events:none">★</text>';
+        }
       });
 
       // X-axel etiketter (var 2:a kromosom)
@@ -3355,15 +3567,16 @@ function runAnalysisCore() {
         + circles + '</svg>';
 
       html += svgHtml;
-      html += '<div id="'+_tipId+'" style="display:block;min-height:36px;background:var(--bg2,#1a2535);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:11px;margin-top:6px;line-height:1.7;color:var(--muted,#8899aa)">Hovra över en bubbla för detaljer</div>';
+      html += '<div id="'+_tipId+'" style="display:block;min-height:36px;background:var(--bg2,#1a2535);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:11px;margin-top:6px;line-height:1.7;color:var(--muted,#8899aa)">Hovra över en bubbla för detaljer · klicka för att låsa</div>';
 
             var anparClusters = clusters.filter(function(cl){ return cl.anpar.length > 0; });
       if (anparClusters.length) {
         html += `<div style="margin-top:10px;font-size:11px;font-weight:700;color:var(--yellow)">★ Kluster med känt anparet:</div>`;
+        anparClusters.sort(function(x, y) { return (y.conf ? y.conf.length : 0) - (x.conf ? x.conf.length : 0); });
         anparClusters.forEach(function(cl) {
           html += `<div class="finding good" style="border-left-color:var(--yellow);margin-top:4px">
             <span style="color:var(--yellow);font-weight:700">K${cl.chr} ${cl.start.toFixed(1)}–${cl.end.toFixed(1)} Mb</span>
-            · ${cl.names.length} träffar · ${escH(cl.anpar.join(' · '))}${cl.mcm ? ' · <span style="color:var(--muted)">' + genSummaryText(estimateGenerations(cl.mcm, state._segT||7)) + '</span>' : ''}
+            · ${cl.names.length} träffar · ${escH(cl.anpar.join(' · '))}${cl.conf && cl.conf.length ? ' <span class="tag tag-green">★ bekräftat via segment</span><div style="font-size:11px;color:var(--muted)">' + cl.conf.map(function(c){ return escH(c.person) + ' = A:s «' + escH(c.a) + '» ⟷ B:s «' + escH(c.b) + '» (' + c.score + 'p)'; }).join('<br>') + '</div>' : ''}${cl.mcm ? ' · <span style="color:var(--muted)">' + genSummaryText(estimateGenerations(cl.mcm, state._segT||7)) + '</span>' : ''}
           </div>`;
         });
       }
@@ -3908,6 +4121,7 @@ function runAnalysisCore() {
 
   html += `</div>`;
   document.getElementById('analysisOutput').innerHTML = html;
+  initAnalysisCollapse();
 
   // Export-knappar läggs UTANFÖR analysisOutput — efter §9 Kromosomkartor
   var btnBar = document.getElementById('analysis-export-bar');
@@ -3936,7 +4150,7 @@ function printAnalysis() {
   var nameB = document.getElementById('nameB').value || 'Person B';
   var date  = new Date().toLocaleDateString('sv-SE');
   var meta  = document.getElementById('printMeta');
-  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.2.01';
+  if (meta) meta.textContent = nameA + ' ↔ ' + nameB + '  ·  Genererad: ' + date + '  ·  DNA-Match Analyzer v1.2.12';
   showTab('analys');
   // Small delay so tab switch and meta text render before print dialog opens
   setTimeout(function(){ window.print(); }, 150);
@@ -3972,9 +4186,9 @@ function exportAnalysisHtml() {
     + '<style>\n' + css + '\n</style></head><body>\n'
     + '<h1>\uD83E\uDDEC DNA-Analysrapport</h1>\n'
     + '<div class="meta"><strong>' + escH(nameA) + '</strong> \u2194 <strong>' + escH(nameB) + '</strong>'
-    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.2.01</div>\n'
+    + ' &nbsp;\u00B7&nbsp; Genererad: ' + date + ' &nbsp;\u00B7&nbsp; DNA-Match Analyzer v1.2.12</div>\n'
     + content + '\n'
-    + '<footer>Genererad av DNA-Match Analyzer v1.2.01 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
+    + '<footer>Genererad av DNA-Match Analyzer v1.2.12 &middot; DNA-intervaller baserade p\u00E5 Blaine Bettingers MRCA-tabeller och ISOGG-data.</footer>\n'
     + '</body></html>';
 
   const suggestedHtml = ('DNA-Analys_' + nameA + '_' + nameB + '_' + date).replace(/[\/\\:*?"<>| ]/g,'_');
@@ -3994,7 +4208,7 @@ function exportAnalysisTxt() {
   // Strip HTML tags for plain text
   const tmp = document.createElement('div');
   tmp.innerHTML = el.innerHTML;
-  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.2.01\n${'='.repeat(50)}\n\n` + tmp.innerText;
+  const text = `DNA-ANALYSRAPPORT\n${'='.repeat(50)}\n${nameA} ↔ ${nameB}\nGenererad: ${new Date().toLocaleDateString('sv-SE')}\nDNA-Match Analyzer v1.2.12\n${'='.repeat(50)}\n\n` + tmp.innerText;
   const suggestedTxt = ('DNA-Analys_' + nameA + '_' + nameB).replace(/[\/\\:*?"<>| ]/g,'_');
   const chosenTxt = prompt('Exportera som text:', suggestedTxt);
   if (chosenTxt === null) return;
@@ -4004,8 +4218,18 @@ function exportAnalysisTxt() {
   a.download = (chosenTxt.trim() || suggestedTxt) + '.txt';
   a.click();
 }
-function getSessionData() {
-  return {
+function getSessionData(embedGedcom) {
+  var gedcomLink = {}, gedcomText = {};
+  ['A', 'B'].forEach(function(side) {
+    var meta = state.gedcomMeta[side], person = state['person' + side];
+    if (!meta && !person) return;
+    gedcomLink[side] = {
+      fileName: meta ? meta.fileName : '', size: meta ? meta.size : 0, fp: meta ? meta.fp : '', persons: meta ? meta.persons : 0,
+      personId: person ? person.id : '', personName: person ? person.name : '', personBorn: person ? (person.born || '') : ''
+    };
+    if (embedGedcom && state.gedcomRaw[side]) gedcomText[side] = state.gedcomRaw[side];
+  });
+  var out = {
     version: state.version,
     savedAt: new Date().toISOString(),
     nameA: document.getElementById('nameA').value,
@@ -4023,12 +4247,16 @@ function getSessionData() {
     },
     matches: state.matches,
     motherName: state.motherName,
-    testers: state.testers || []
+    testers: state.testers || [],
+    gedcom: gedcomLink
   };
+  if (embedGedcom && Object.keys(gedcomText).length) out.gedcomText = gedcomText;
+  return out;
 }
 
-function saveSession() {
-  const data = getSessionData();
+function saveSession(embedGedcom) {
+  if (embedGedcom !== true) embedGedcom = !!(document.getElementById('sessEmbedGedcom') || {}).checked;
+  const data = getSessionData(embedGedcom);
   const nameA = data.nameA || 'PersonA';
   const nameB = data.nameB || 'PersonB';
   const filename = `${nameA} - ${nameB}.json`.replace(/[\/\\:*?"<>|]/g, '_');
@@ -4071,6 +4299,7 @@ function loadSession(event) {
         const inp = document.getElementById('motherNameInput');
         if (inp) inp.value = data.motherName;
       }
+      restoreGedcomLink(data);
       renderMatchList();
       updateTesterFilterButtons();
       updateSessionMeta(data);
@@ -4101,6 +4330,9 @@ function clearSession() {
   state.personB = null;
   state.triGedcomAll = [];
   state.triGedcomPicks = {};
+  state.gedcomMeta = {};
+  state.gedcomRaw = {};
+  state._pendingGedcom = {};
 
   // Reset GEDCOM status indicators
   ['A','B'].forEach(function(side) {
@@ -4140,6 +4372,9 @@ function clearSession() {
     '<div class="empty"><div class="empty-icon">🔍</div>Klicka på <strong>Kör analys</strong> för att starta.</div>';
   var bar = document.getElementById('analysis-export-bar');
   if (bar) bar.remove();
+  var cbar = document.getElementById('analysis-collapse-bar');
+  if (cbar) cbar.remove();
+  state._collapse = {};
 
   renderMatchList();
   updateTesterFilterButtons();
@@ -4160,6 +4395,13 @@ function updateSessionMeta(data) {
   } else {
     info.textContent = `Aktiv session: ${nA} ↔ ${nB} · ${matchCount} gemensamma träffar`;
   }
+  // GEDCOM-koppling
+  var gl = ['A', 'B'].map(function(side) {
+    var meta = state.gedcomMeta && state.gedcomMeta[side], person = state['person' + side];
+    if (!meta && !person) return '';
+    return 'GEDCOM ' + side + ': ' + escH(meta ? meta.fileName + ' (' + meta.persons + ' pers.)' : 'ej laddad') + (person ? ' → ' + escH(person.name) : '');
+  }).filter(Boolean);
+  if (gl.length) info.innerHTML = info.innerHTML + '<br>' + gl.join('<br>');
 }
 
 // ═══════════════════════════════════════════════
@@ -4771,6 +5013,60 @@ function chrLegendDotStyle(name) {
 
 const chrHiddenNames = new Set();
 
+// ── PERSON A-SPÅR (v1.2.12) ─────────────────────────────────────────
+// Täckningsprofil längs en kromosom: för varje intervall, hur många olika träffar som överlappar
+// och hur de fördelar sig på sida (far/mor/okänd). Sweep-line, O(n log n).
+function chrBuildProfile(segs) {
+  var ev = [], sideOf = {};
+  segs.forEach(function(sg) {
+    sideOf[sg.matchName] = sg.side || null;
+    ev.push([sg.start, 1, sg.matchName]);
+    ev.push([sg.end, -1, sg.matchName]);
+  });
+  ev.sort(function(a, b) { return a[0] - b[0] || a[1] - b[1]; }); // slut före start vid samma koordinat
+  var active = new Map(), out = [], pos = null;
+  function snapshot(a, b) {
+    if (!(b > a) || !active.size) return;
+    var far = 0, mor = 0, unk = 0;
+    active.forEach(function(c, n) {
+      var sd = sideOf[n];
+      if (sd === 'far') far++; else if (sd === 'mor') mor++;
+      else if (sd === 'both') { far++; mor++; } else unk++;
+    });
+    var last = out[out.length - 1];
+    if (last && last.b === a && last.n === active.size && last.far === far && last.mor === mor && last.unk === unk) { last.b = b; return; }
+    out.push({ a: a, b: b, n: active.size, far: far, mor: mor, unk: unk });
+  }
+  ev.forEach(function(e) {
+    if (pos !== null && e[0] > pos) snapshot(pos, e[0]);
+    pos = e[0];
+    var c = (active.get(e[2]) || 0) + e[1];
+    if (c <= 0) active.delete(e[2]); else active.set(e[2], c);
+  });
+  return out;
+}
+// Begränsa antal block (stora FTDNA-dataset): kasta in i bins, behåll högsta täckning per bin
+function chrCapProfile(prof, chrLen, maxBlocks) {
+  if (prof.length <= maxBlocks) return prof;
+  var bw = chrLen / maxBlocks, res = [], j = 0;
+  for (var bi = 0; bi < maxBlocks; bi++) {
+    var lo = bi * bw, hi = lo + bw, best = null;
+    while (j > 0 && prof[j - 1].b > lo) j--;
+    for (var k = j; k < prof.length && prof[k].a < hi; k++) {
+      if (prof[k].b > lo && (!best || prof[k].n > best.n)) best = prof[k];
+    }
+    if (best) res.push({ a: lo, b: hi, n: best.n, far: best.far, mor: best.mor, unk: best.unk });
+  }
+  return res;
+}
+function chrProfileBg(iv) {
+  var FAR = '#3fb950', MOR = '#58a6ff', UNK = '#8b98a5';
+  if (iv.far > iv.mor) return FAR;
+  if (iv.mor > iv.far) return MOR;
+  if (iv.far > 0) return 'repeating-linear-gradient(45deg,' + FAR + ' 0 3px,' + MOR + ' 3px 6px)';
+  return UNK;
+}
+
 function renderChromosomeMap() {
   const container = document.getElementById('chr-map-container');
   const emptyMsg  = document.getElementById('chr-empty-msg');
@@ -4892,6 +5188,14 @@ function renderChromosomeMap() {
   }
 
   const NAME_COL = 220;
+  // v1.2.12: index så att varje person/kromosom slås upp direkt i stället för att söka igenom alla segment
+  const segIndex = {};
+  allSegments.forEach(function(sg) {
+    var ci = segIndex[sg.chr] || (segIndex[sg.chr] = {});
+    (ci[sg.matchName] || (ci[sg.matchName] = [])).push(sg);
+  });
+  const mxByName = {};
+  state.matches.forEach(function(m) { if (!(m.name in mxByName)) mxByName[m.name] = m; });
   const nA = ((state.personA && state.personA.name) || '').toLowerCase();
   const nB = ((state.personB && state.personB.name) || '').toLowerCase();
 
@@ -4910,39 +5214,52 @@ function renderChromosomeMap() {
     return Object.values(ged);
   }
 
+  // Förnamn → lista med efternamnsord, byggs en gång per rendering (var tidigare en full GEDCOM-genomsökning per person och kromosom)
+  var _gedIdxCache = null;
+  function normGedIdx(persons) {
+    var idx = new Map();
+    persons.forEach(function(p) {
+      var given   = (p.given   || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
+      var surname = (p.surname || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
+      var f, sw;
+      if (given && surname) {
+        f = given.split(/\s+/)[0]; sw = surname.split(/\s+/);
+      } else {
+        var pn = (p.name || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
+        if (!pn) return;
+        var pWords = pn.split(/\s+/).filter(function(w){ return w.length > 1 && !/^\d/.test(w); });
+        if (pWords.length < 2) return;
+        f = pWords[0]; sw = pWords;
+      }
+      if (!idx.has(f)) idx.set(f, []);
+      idx.get(f).push(sw);
+    });
+    return idx;
+  }
+  var _glCache = {};
   function gedcomLabel(name) {
+    if (Object.prototype.hasOwnProperty.call(_glCache, name)) return _glCache[name];
+    return (_glCache[name] = gedcomLabelRaw(name));
+  }
+  function gedcomLabelRaw(name) {
     var nameLc = name.toLowerCase().replace(/[*†°\(\)]/g,'').trim();
     var nameWords = nameLc.split(/\s+/).filter(function(w){ return w.length > 1 && !/^\d/.test(w); });
     if (nameWords.length < 2) return null;
     var first = nameWords[0];
     var last  = nameWords[nameWords.length - 1];
 
-    function matchesGed(persons) {
-      return persons.some(function(p) {
-        // Använd p.given och p.surname om de finns
-        var given   = (p.given   || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
-        var surname = (p.surname || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
-        if (given && surname) {
-          var gFirst = given.split(/\s+/)[0];
-          var sWords = surname.split(/\s+/);
-          return gFirst === first && sWords.indexOf(last) >= 0;
-        }
-        // Fallback: p.name
-        var pn = (p.name || '').toLowerCase().replace(/[*†°\(\)]/g,'').trim();
-        if (!pn) return false;
-        var pWords = pn.split(/\s+/).filter(function(w){ return w.length > 1 && !/^\d/.test(w); });
-        if (pWords.length < 2) return false;
-        return pWords[0] === first && pWords.indexOf(last) >= 0;
-      });
+    function matchesGed(idx) {
+      return (idx.get(first) || []).some(function(sw) { return sw.indexOf(last) >= 0; });
     }
 
-    var gedA = gedPersons(state.gedcomA);
-    var gedB = gedPersons(state.gedcomB);
-    if (matchesGed(gedB)) return 'B';
-    if (matchesGed(gedA)) return 'A';
+    if (!_gedIdxCache) {
+      _gedIdxCache = { A: normGedIdx(gedPersons(state.gedcomA)), B: normGedIdx(gedPersons(state.gedcomB)) };
+    }
+    if (matchesGed(_gedIdxCache.B)) return 'B';
+    if (matchesGed(_gedIdxCache.A)) return 'A';
 
     // Kolla om personen nämns i sitt eget anträde som sista led (= testperson till A)
-    var ownMx = state.matches.find(function(x){ return x.name === name; });
+    var ownMx = mxByName[name];
     if (ownMx && ownMx.antrade) {
       var parts = ownMx.antrade.trim().split(/\s*\/\s*/);
       var lastPart = parts[parts.length-1].replace(/\[|\]/g,'').toLowerCase().trim();
@@ -4955,7 +5272,7 @@ function renderChromosomeMap() {
   }
 
   function getAntrade(name) {
-    var mx = state.matches.find(function(x){ return x.name === name; });
+    var mx = mxByName[name];
     if (mx && mx.antrade && mx.antrade.trim()) return mx.antrade.trim();
 
     // Blockera Person B
@@ -4990,14 +5307,34 @@ function renderChromosomeMap() {
     return cleaned.slice(-2).join(' / ');
   }
 
+  // Person A-spår: förberäkna profiler så att höjden kan skalas mot globalt maximum
+  var showTrack = (document.getElementById('chr-filter-track') || {}).value !== 'off';
+  var chrProfiles = {}, trackMax = 1;
+  if (showTrack) {
+    chrsToShow.forEach(function(ck) {
+      var visSegs = allSegments.filter(function(sg) { return sg.chr === ck && !chrHiddenNames.has(sg.matchName); });
+      var prof = chrCapProfile(chrBuildProfile(visSegs), CHR_LENGTHS[ck], 600);
+      chrProfiles[ck] = prof;
+      prof.forEach(function(iv) { if (iv.n > trackMax) trackMax = iv.n; });
+    });
+  }
+  var nameAtrack = ((state.personA && state.personA.name) || 'Person A').replace(/[*†°]+/g, '').trim();
+
   // Rendera
   var html = '';
+  if (showTrack) {
+    html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">'
+      + '<strong style="color:var(--accent2)">Person A-spår</strong> — höjd = antal träffar som överlappar (max ' + trackMax + '), färg: '
+      + '<span style="color:#3fb950">■</span> fars sida &nbsp;<span style="color:#58a6ff">■</span> mors sida &nbsp;'
+      + '<span style="background:repeating-linear-gradient(45deg,#3fb950 0 3px,#58a6ff 3px 6px);display:inline-block;width:10px;height:10px;vertical-align:middle"></span> båda &nbsp;'
+      + '<span style="color:#8b98a5">■</span> okänd sida. Mycket höga toppar över stora delar av en kromosom kan vara falska träffar (IBS).</div>';
+  }
   chrsToShow.forEach(function(chrKey) {
     var chrLen = CHR_LENGTHS[chrKey];
 
+    var _ci = segIndex[chrKey] || {};
     var namesOnChr = allNamesSorted.filter(function(name) {
-      return !chrHiddenNames.has(name) &&
-             allSegments.some(function(s){ return s.chr === chrKey && s.matchName === name; });
+      return !chrHiddenNames.has(name) && _ci[name];
     });
     if (!namesOnChr.length) return;
 
@@ -5061,9 +5398,27 @@ function renderChromosomeMap() {
         '<div style="position:absolute;right:0;top:0;font-size:9px;color:var(--muted)">' + Math.round(chrLen) + ' Mb</div>' +
       '</div></div>';
 
+    // Person A-spår
+    if (showTrack && chrProfiles[chrKey] && chrProfiles[chrKey].length) {
+      var TRK_H = 28;
+      html += '<div style="display:flex;align-items:flex-end;gap:0;margin-bottom:4px">'
+        + '<div style="width:' + NAME_COL + 'px;min-width:' + NAME_COL + 'px;font-size:11px;font-weight:700;color:var(--accent2);padding-right:8px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escH(nameAtrack) + ' (Person A) — täckning &amp; sida">' + escH(nameAtrack) + ' · täckning</div>'
+        + '<div style="flex:1;position:relative;height:' + TRK_H + 'px;border-bottom:1px solid var(--border)">';
+      chrProfiles[chrKey].forEach(function(iv) {
+        var left = (iv.a / chrLen * 100).toFixed(3);
+        var width = Math.max((iv.b - iv.a) / chrLen * 100, 0.3).toFixed(3);
+        var h = Math.round(3 + (iv.n / trackMax) * (TRK_H - 3));
+        var tip = escH('Kr ' + chrKey + ': ' + iv.a.toFixed(1) + '–' + iv.b.toFixed(1) + ' Mb\n' + iv.n + ' träffar överlappar'
+                  + '\nFar ' + iv.far + ' · Mor ' + iv.mor + ' · Okänd ' + iv.unk);
+        html += '<div style="position:absolute;left:' + left + '%;width:' + width + '%;bottom:0;height:' + h + 'px;background:' + chrProfileBg(iv)
+          + ';opacity:0.9" data-tip="' + tip + '" onmouseenter="chrShowTip(event,this)" onmouseleave="chrHideTip()"></div>';
+      });
+      html += '</div></div>';
+    }
+
     // En rad per person
     namesOnChr.forEach(function(name) {
-      var segs   = allSegments.filter(function(s){ return s.chr === chrKey && s.matchName === name; });
+      var segs   = _ci[name] || [];
       var ants   = antradeForName[name] || [];  // kortformat
       var syms   = ants.map(function(short){ return antradeGroupMap[short] || ''; }).filter(Boolean);
       var gedLbl = gedcomLabel(name);
@@ -5181,29 +5536,52 @@ function buildSegmentClusters(matches) {
   });
 
   var results = [];
+  // Antrade per träffnamn — byggs en gång (tidigare för varje kluster)
+  var _antradeByName = {};
+  state.matches.forEach(function(m) { if (m.antrade) _antradeByName[m.name] = m.antrade; });
 
   Object.keys(byChr).forEach(function(chrKey) {
     var segs = byChr[chrKey].slice().sort(function(a,b) {
       return a.start !== b.start ? a.start - b.start : a.end - b.end;
     });
-    // Begränsa för säkerhet
-    if (segs.length > 500) segs = segs.slice(0, 500);
+    // (v1.2.12: 500-segmentskapet borttaget — sweep-line är O(n log n) och kapet kastade tyst
+    //  alla segment längre ut på kromosomen i stora dataset)
 
-    // Sweep-line klustring: gå igenom en gång, utöka aktivt kluster
+    // v1.2.12: kluster = maximala grupper av segment som ÖVERLAPPAR VARANDRA i ett gemensamt område
+    // (maximala klickar i intervallgrafen). Tidigare kedjades segment: A–B, B–C, C–D blev ett kluster
+    // trots att A och D inte delar något, vilket gav jättelika "kluster" över hela kromosomer.
+    // Klusterposition = det gemensamma överlappet; cM = längsta medlemssegment, mcm = median.
     var clusters = [];
-    var cur = null;
-    segs.forEach(function(s) {
-      if (!cur || s.start >= cur.end) {
-        // Nytt kluster
-        cur = { start: s.start, end: s.end, cm: s.cm, nameSet: {}, cms: [] };
-        clusters.push(cur);
-      } else {
-        // Utöka aktivt kluster
-        cur.end = Math.max(cur.end, s.end);
-        cur.cm  = Math.max(cur.cm,  s.cm);
+    var evs = [];
+    segs.forEach(function(sg, ix) { evs.push([sg.start, 1, ix]); evs.push([sg.end, -1, ix]); });
+    evs.sort(function(a, b) { return a[0] - b[0] || a[1] - b[1]; }); // slut före start vid samma koordinat
+    var activeSet = new Set(), lastWasAdd = false, byKey = {};
+    evs.forEach(function(e) {
+      if (e[1] === 1) { activeSet.add(e[2]); lastWasAdd = true; return; }
+      if (lastWasAdd && activeSet.size >= 2) {
+        // aktiva mängden precis före första avslutet efter en rad starter = maximal klick
+        var nameSet = {}, cms = [], st = -Infinity, en = Infinity, mx = 0, nn = 0;
+        activeSet.forEach(function(ix) {
+          var m = segs[ix];
+          if (!nameSet[m.matchName]) { nameSet[m.matchName] = true; nn++; }
+          if (m.start > st) st = m.start;
+          if (m.end < en) en = m.end;
+          if (m.cm > mx) mx = m.cm;
+          if (m.cm > 0) cms.push(m.cm);
+        });
+        if (nn >= 2 && en > st) {
+          var key = Object.keys(nameSet).sort().join('|');
+          var prev = byKey[key];
+          // Samma uppsättning personer i flera klickar (t.ex. en person med flera segment): behåll bredaste överlappet
+          if (!prev || (en - st) > (prev.end - prev.start)) {
+            var cl = { start: st, end: en, cm: mx, nameSet: nameSet, cms: cms };
+            if (prev) clusters[clusters.indexOf(prev)] = cl; else clusters.push(cl);
+            byKey[key] = cl;
+          }
+        }
       }
-      if (s.cm > 0) cur.cms.push(s.cm);
-      cur.nameSet[s.matchName] = true;
+      activeSet.delete(e[2]);
+      lastWasAdd = false;
     });
 
     clusters.forEach(function(cl) {
@@ -5211,10 +5589,7 @@ function buildSegmentClusters(matches) {
       if (names.length < 2) return;
 
       // Anpar delade av ≥2 namn
-      var anparCount = {};
-      // Bygg en snabb lookup: matchName → antrade
-      var _antradeByName = {};
-      state.matches.forEach(function(m) { if (m.antrade) _antradeByName[m.name] = m.antrade; });
+      var anparCount = {}, anparLabel = {};
       names.forEach(function(name) {
         var antrade = _antradeByName[name];
         if (!antrade) return;
@@ -5225,11 +5600,16 @@ function buildSegmentClusters(matches) {
             .filter(function(c){ return /\b1[6-9]\d\d\b/.test(c); });
           for (var i = 0; i < withYear.length; i += 2) {
             var pair = withYear[i] + (i+1 < withYear.length ? ' / ' + withYear[i+1] : '');
-            if (pair) anparCount[pair] = (anparCount[pair] || 0) + 1;
+            if (pair) {
+              // v1.2.12: skiftlägesoberoende nyckel (OLA Jönsson = Ola Jönsson), första stavningen visas
+              var pk = pair.toLowerCase().replace(/\s+/g, ' ').replace(/[\u2013\u2014-]/g, '-');
+              if (!anparLabel[pk]) anparLabel[pk] = pair;
+              anparCount[pk] = (anparCount[pk] || 0) + 1;
+            }
           }
         });
       });
-      var sharedAnpar = Object.keys(anparCount).filter(function(k){ return anparCount[k] >= 2; });
+      var sharedAnpar = Object.keys(anparCount).filter(function(k){ return anparCount[k] >= 2; }).map(function(k){ return anparLabel[k]; });
 
       results.push({ chr: chrKey, start: cl.start, end: cl.end, cm: cl.cm, mcm: medianOf(cl.cms), names: names, anpar: sharedAnpar });
     });
@@ -5243,6 +5623,70 @@ function buildSegmentClusters(matches) {
 }
 
 // ═══════════════════════════════════════════════
+// KOLLAPSA / EXPANDERA ANALYSAVSNITT (v1.2.12)
+// ═══════════════════════════════════════════════
+// Nyckel = avsnittsnummer ur rubriken (t.ex. '2', '3b'). Avsnitt utan nummer (Samlad bedömning) får nyckeln 'other'.
+var ANALYSIS_OPEN_DEFAULT = ['2', '3b', '5b', '7'];
+
+function analysisBlocks() {
+  var ao = document.getElementById('analysisOutput');
+  if (!ao) return [];
+  return Array.prototype.filter.call(ao.querySelectorAll('.analysis-block'), function(b) {
+    return b.querySelector(':scope > h3') && b.querySelector(':scope > .analysis-result');
+  });
+}
+function analysisBlockKey(block) {
+  var h = block.querySelector(':scope > h3');
+  var m = h && h.textContent.match(/(\d+[a-z]?)\.\s/);
+  return m ? m[1] : 'other';
+}
+function analysisSetCollapsed(block, collapsed, remember) {
+  block.classList.toggle('collapsed', !!collapsed);
+  if (remember) {
+    state._collapse = state._collapse || {};
+    state._collapse[analysisBlockKey(block)] = !!collapsed;
+  }
+}
+function analysisCollapseAll(expand) {
+  analysisBlocks().forEach(function(b) { analysisSetCollapsed(b, !expand, true); });
+}
+function analysisCollapseDefault() {
+  state._collapse = {};
+  analysisBlocks().forEach(function(b) {
+    analysisSetCollapsed(b, ANALYSIS_OPEN_DEFAULT.indexOf(analysisBlockKey(b)) < 0, false);
+  });
+}
+function initAnalysisCollapse() {
+  var ao = document.getElementById('analysisOutput');
+  if (!ao) return;
+  analysisBlocks().forEach(function(b) {
+    b.classList.add('collapsible');
+    var key = analysisBlockKey(b);
+    var saved = state._collapse && state._collapse[key];
+    analysisSetCollapsed(b, saved !== undefined ? saved : ANALYSIS_OPEN_DEFAULT.indexOf(key) < 0, false);
+  });
+  if (!ao._collapseBound) {
+    ao._collapseBound = true;
+    ao.addEventListener('click', function(ev) {
+      var h = ev.target.closest && ev.target.closest('.analysis-block.collapsible > h3');
+      if (!h || ev.target.closest('button, a, input, select, textarea')) return;
+      var block = h.parentNode;
+      analysisSetCollapsed(block, !block.classList.contains('collapsed'), true);
+    });
+  }
+  var bar = document.getElementById('analysis-collapse-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'analysis-collapse-bar';
+    bar.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px';
+    ao.parentNode.insertBefore(bar, ao);
+  }
+  bar.innerHTML = '<button class="btn btn-secondary btn-sm" onclick="App.analysisCollapseAll(true)">⊞ Expandera alla</button>'
+    + '<button class="btn btn-secondary btn-sm" onclick="App.analysisCollapseAll(false)">⊟ Kollapsa alla</button>'
+    + '<button class="btn btn-secondary btn-sm" onclick="App.analysisCollapseDefault()">↺ Standardvy</button>';
+}
+
+// ═══════════════════════════════════════════════
 // GENERATIONSUPPSKATTNING PER SEGMENT (v1.2.01)
 // ═══════════════════════════════════════════════
 // Modell: ett segment ärvt från gemensam anfader över n meioser har längd ~ Exp(medel 100/n cM).
@@ -5252,6 +5696,59 @@ function buildSegmentClusters(matches) {
 // (om båda ligger lika långt ned). Likformigt prior över g = 1..GEN_MAX. Ett enskilt segment
 // ger en bred fördelning — kurvan visar osäkerheten, inte ett facit.
 var GEN_MAX = 15;
+
+// Namnjämförelse som tål mellannamn och GEDCOM-tecken (Rebecka* Ellinor Danielsson = Rebecka Danielsson)
+function nameTokens(n) {
+  return String(n || '').replace(/\(.*?\)/g, ' ').replace(/[*†°<>]+/g, '')
+    .toLowerCase().split(/[^a-zåäöéèüøæ]+/).filter(Boolean);
+}
+function sameNamePerson(a, b) {
+  var ta = nameTokens(a), tb = nameTokens(b);
+  if (!ta.length || !tb.length) return false;
+  if (ta.join(' ') === tb.join(' ')) return true;
+  return ta.length >= 2 && tb.length >= 2 && ta[0] === tb[0] && ta[ta.length - 1] === tb[tb.length - 1];
+}
+
+// ═══════════════════════════════════════════════
+// ANPAR-KOPPLING SEGMENT ↔ GEDCOM (v1.2.12)
+// ═══════════════════════════════════════════════
+// Ett kluster pekar på ett anpar när ≥2 träffar delar samma [hakparentes]-anpar i sina anträden (cl.anpar).
+// Om en av dessa personer (namn + födelseår ±3) också finns i GEDCOM-jämförelsen A⟷B (medel/hög) räknas
+// klustret som "bekräftat via segment". Länkas automatiskt åt båda hållen.
+function anparPersonsOf(anparStr) {
+  return String(anparStr || '').split(' / ').map(function(item) {
+    var ym = item.match(/\b1[5-9]\d\d\b/);
+    return { text: item.trim(), name: item.replace(/\d.*$/, '').replace(/[*†°\[\]]+/g, '').trim(), year: ym ? parseInt(ym[0]) : null };
+  }).filter(function(x) { return x.name; });
+}
+function confirmClustersViaGedcom(clusters, gedResults) {
+  var cands = (gedResults || []).filter(function(r) { return r.conf === 'high' || r.conf === 'medium'; });
+  (gedResults || []).forEach(function(r) { r._conf = []; });
+  clusters.forEach(function(cl) {
+    cl.conf = [];
+    if (!cl.anpar || !cl.anpar.length || !cands.length) return;
+    var seen = {};
+    cl.anpar.forEach(function(ap) {
+      anparPersonsOf(ap).forEach(function(pp) {
+        if (!pp.year) return;
+        cands.forEach(function(r) {
+          [['A', r.pA], ['B', r.pB]].some(function(side) {
+            var g = side[1];
+            if (!g || !g.born || Math.abs(g.born - pp.year) > 3 || !sameNamePerson(pp.name, g.name)) return false;
+            var key = pp.text + '|' + r.pA.id + '|' + r.pB.id;
+            if (seen[key]) return true;
+            seen[key] = true;
+            cl.conf.push({ person: pp.text, a: r.pA.name + (r.pA.born ? ' f.' + r.pA.born : ''), b: r.pB.name + (r.pB.born ? ' f.' + r.pB.born : ''), score: r.score, conf: r.conf });
+            r._conf.push({ chr: cl.chr, start: cl.start, end: cl.end, n: cl.names.length, person: pp.text });
+            return true;
+          });
+        });
+      });
+    });
+    cl.conf.sort(function(x, y) { return y.score - x.score; });
+    if (cl.conf.length > 3) cl.conf = cl.conf.slice(0, 3);
+  });
+}
 
 function medianOf(arr) {
   if (!arr || !arr.length) return null;
@@ -5481,7 +5978,7 @@ function runGedcompAnalysis() {
 }
 
 // ── KLUSTER BUBBEL-TOOLTIP ──
-function clShowTip(circle) {
+function clRenderTip(circle) {
   var tipId = circle.getAttribute('data-tip');
   var tip = document.getElementById(tipId);
   if (!tip) return;
@@ -5496,6 +5993,11 @@ function clShowTip(circle) {
   if (!cl) return;
   var star = cl.anpar && cl.anpar.length
     ? '<span style="color:#c9a84c">★ Möjligt anparet: '+cl.anpar.join(' · ')+'</span><br>' : '';
+  if (cl.conf && cl.conf.length) {
+    star = '<span style="color:#f0c040;font-weight:700">★ Bekräftat via segment + GEDCOM-jämförelse</span><br>'
+      + cl.conf.map(function(c) { return '<span style="color:#c9a84c">' + c.person + ' = A:s «' + c.a + '» ⟷ B:s «' + c.b + '» (' + c.score + 'p)</span>'; }).join('<br>')
+      + '<br>' + star;
+  }
   var namesList = cl.names.map(function(n) {
     return cl.hasB && n === cl.names.find(function(x){ return x === n && cl.hasB; })
       ? n : n;
@@ -5516,9 +6018,8 @@ function clShowTip(circle) {
     + (cl.cm ? ' · ca '+cl.cm+' cM' : '') + ' · <strong>'+cl.n+' träffar</strong><br>'
     + star
     + '<span style="color:var(--muted,#8899aa)">' + cl.names.map(function(n){
-        var nc = n.replace(/[^a-zåäö]/gi,'').toLowerCase();
-        return (cl.hasB && _bn && nc.indexOf(_bn) >= 0)
-          ? '<strong style="color:#d0e8ff">'+n+'</strong>' : n;
+        return (cl.bn && cl.bn.indexOf(n) >= 0)
+          ? '<strong style="color:#d0e8ff">' + n + '</strong>' : n;
       }).join(', ') + '</span>'
     + (function() {
         var est = estimateGenerations(cl.mcm || cl.cm, cl.T);
@@ -5529,12 +6030,58 @@ function clShowTip(circle) {
           + '<span style="font-size:10px;color:var(--muted,#8899aa)">Sannolikhet per generation till gemensam anfader (baserat på ' + (cl.mcm || cl.cm) + ' cM)</span></div>';
       })();
 }
+function clIsPinned(circle) {
+  var svg = circle.closest('svg');
+  return !!(svg && svg.getAttribute('data-pinned') !== null);
+}
+function clShowTip(circle) {
+  if (clIsPinned(circle)) return;   // fastlåst — hovring ändrar inget
+  clRenderTip(circle);
+}
+function clPinStyle(circle, on) {
+  if (on) {
+    if (!circle.hasAttribute('data-os')) {
+      circle.setAttribute('data-os', circle.getAttribute('stroke') || '');
+      circle.setAttribute('data-osw', circle.getAttribute('stroke-width') || '1.5');
+    }
+    circle.setAttribute('stroke', '#39ff14');
+    circle.setAttribute('stroke-width', '3.5');
+    circle.setAttribute('stroke-dasharray', '6 4');
+  } else if (circle.hasAttribute('data-os')) {
+    circle.setAttribute('stroke', circle.getAttribute('data-os'));
+    circle.setAttribute('stroke-width', circle.getAttribute('data-osw'));
+    circle.removeAttribute('stroke-dasharray');
+  }
+}
+function clTogglePin(circle) {
+  var svg = circle.closest('svg');
+  if (!svg) return;
+  var cur = svg.getAttribute('data-pinned');
+  var i = circle.getAttribute('data-i');
+  if (cur === i) {                       // klick på låst bubbla → släpp
+    svg.removeAttribute('data-pinned');
+    clPinStyle(circle, false);
+    clRenderTip(circle);                 // musen är fortfarande över bubblan
+    return;
+  }
+  if (cur !== null) {                    // byt låst bubbla
+    var prev = svg.querySelector('circle[data-i="' + cur + '"]');
+    if (prev) clPinStyle(prev, false);
+  }
+  svg.setAttribute('data-pinned', i);
+  clPinStyle(circle, true);
+  clRenderTip(circle);
+  var tip = document.getElementById(circle.getAttribute('data-tip'));
+  if (tip) tip.insertAdjacentHTML('beforeend',
+    '<div style="margin-top:6px;font-size:10px;color:#eda100">📌 Låst — klicka på bubblan igen för att släppa</div>');
+}
 function clHideTip(circle) {
+  if (clIsPinned(circle)) return;
   var tipId = circle.getAttribute('data-tip');
   var tip = document.getElementById(tipId);
   if (tip) {
     tip.style.color = 'var(--muted,#8899aa)';
-    tip.innerHTML = 'Hovra över en bubbla för detaljer';
+    tip.innerHTML = 'Hovra över en bubbla för detaljer · klicka för att låsa';
   }
 }
 
@@ -5617,6 +6164,24 @@ function chrRenderToCanvas() {
     var chrs      = window._chrLastChrsToShow || [];
     if (!segs.length || !chrs.length) return null;
 
+    var hiddenSet = (typeof chrHiddenNames !== 'undefined') ? chrHiddenNames : new Set();
+    segs = segs.filter(function(s){ return !hiddenSet.has(s.matchName); });   // v1.2.12: samma urval som på skärmen
+    if (!segs.length) return null;
+    var trackSel = document.getElementById('chr-filter-track');
+    var showTrack = !trackSel || trackSel.value !== 'off';
+    var profiles = {}, trackMax = 1;
+    if (showTrack) {
+      chrs.forEach(function(ck) {
+        var cs = segs.filter(function(s){ return s.chr === ck; });
+        var pr = chrCapProfile(chrBuildProfile(cs), CHR_LENGTHS[ck] || 250, 600);
+        profiles[ck] = pr;
+        pr.forEach(function(iv){ if (iv.n > trackMax) trackMax = iv.n; });
+      });
+    }
+    var TRK_H  = 30;
+    var LEG_H  = showTrack ? 20 : 0;
+    var nameAtrk = ((state.personA && state.personA.name) || 'Person A').replace(/[*†°]+/g, '').trim();
+
     var SCALE  = 2;
     var PAD    = 14;
     var NAME_W = 200;
@@ -5627,12 +6192,12 @@ function chrRenderToCanvas() {
     var W      = 880;
 
     // Beräkna höjd
-    var totalH = PAD;
+    var totalH = PAD + LEG_H;
     chrs.forEach(function(chrKey) {
       var names = [];
       segs.forEach(function(s){ if (s.chr === chrKey && names.indexOf(s.matchName) < 0) names.push(s.matchName); });
       names.sort();
-      if (names.length) totalH += HDR_H + names.length * ROW_H + GAP;
+      if (names.length) totalH += HDR_H + (showTrack && profiles[chrKey] && profiles[chrKey].length ? TRK_H + 6 : 0) + names.length * ROW_H + GAP;
     });
     totalH += PAD;
 
@@ -5649,6 +6214,24 @@ function chrRenderToCanvas() {
     var trackX = PAD + NAME_W;
     var trackW = W - trackX - PAD;
     var y = PAD;
+
+    if (showTrack) {
+      ctx.font = '10px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#a8c5da';
+      var lx = PAD;
+      ctx.fillText('Person A-spår: höjd = antal träffar som överlappar (max ' + trackMax + ').', lx, y + 11);
+      lx += 330;
+      [['#3fb950','fars sida'],['#58a6ff','mors sida'],['#8b98a5','okänd']].forEach(function(it){
+        ctx.fillStyle = it[0]; ctx.fillRect(lx, y + 3, 9, 9);
+        ctx.fillStyle = '#a8c5da'; ctx.fillText(it[1], lx + 13, y + 11); lx += 17 + ctx.measureText(it[1]).width + 10;
+      });
+      ctx.fillStyle = '#3fb950'; ctx.fillRect(lx, y + 3, 9, 9);
+      ctx.save(); ctx.beginPath(); ctx.rect(lx, y + 3, 9, 9); ctx.clip();
+      ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2;
+      for (var q = -9; q < 18; q += 5) { ctx.beginPath(); ctx.moveTo(lx + q, y + 12); ctx.lineTo(lx + q + 9, y + 3); ctx.stroke(); }
+      ctx.restore();
+      ctx.fillStyle = '#a8c5da'; ctx.fillText('båda', lx + 13, y + 11);
+      y += LEG_H;
+    }
 
     chrs.forEach(function(chrKey) {
       var chrSegs = segs.filter(function(s){ return s.chr === chrKey; });
@@ -5677,6 +6260,34 @@ function chrRenderToCanvas() {
       ctx.textAlign = 'right'; ctx.fillText(Math.round(chrLen) + ' Mb', trackX + trackW, y + 17);
       ctx.textAlign = 'left';
       y += HDR_H;
+
+      // Person A-spår
+      var prof = showTrack ? profiles[chrKey] : null;
+      if (prof && prof.length) {
+        ctx.fillStyle = '#a8c5da'; ctx.font = 'bold 10px system-ui,sans-serif'; ctx.textAlign = 'right';
+        var tl = nameAtrk + ' · täckning'; if (tl.length > 28) tl = tl.slice(0, 26) + '…';
+        ctx.fillText(tl, PAD + NAME_W - 6, y + TRK_H - 3);
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(trackX, y + TRK_H, trackW, 1);
+        prof.forEach(function(iv) {
+          var bx = trackX + (iv.a / chrLen) * trackW;
+          var bw = Math.max((iv.b - iv.a) / chrLen * trackW, 1);
+          var bh = Math.round(3 + (iv.n / trackMax) * (TRK_H - 3));
+          var by = y + TRK_H - bh;
+          var FAR = '#3fb950', MOR = '#58a6ff', UNK = '#8b98a5';
+          if (iv.far > iv.mor) { ctx.fillStyle = FAR; ctx.fillRect(bx, by, bw, bh); }
+          else if (iv.mor > iv.far) { ctx.fillStyle = MOR; ctx.fillRect(bx, by, bw, bh); }
+          else if (iv.far > 0) {
+            ctx.fillStyle = FAR; ctx.fillRect(bx, by, bw, bh);
+            ctx.save(); ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+            ctx.strokeStyle = MOR; ctx.lineWidth = 2;
+            for (var t2 = -bh; t2 < bw + bh; t2 += 6) { ctx.beginPath(); ctx.moveTo(bx + t2, by + bh); ctx.lineTo(bx + t2 + bh, by); ctx.stroke(); }
+            ctx.restore();
+          } else { ctx.fillStyle = UNK; ctx.fillRect(bx, by, bw, bh); }
+        });
+        y += TRK_H + 6;
+      }
+      ctx.font = '10px system-ui,sans-serif';
 
       names.forEach(function(name) {
         var nameSegs = chrSegs.filter(function(s){ return s.matchName === name; });
@@ -5830,6 +6441,9 @@ App.chatClear           = chatClear;
 App.chatRefreshContext  = chatRefreshContext;
 App.chatAddToReport     = chatAddToReport;
 App.clShowTip           = clShowTip;
+App.clTogglePin         = clTogglePin;
+App.analysisCollapseAll     = analysisCollapseAll;
+App.analysisCollapseDefault = analysisCollapseDefault;
 App.clHideTip           = clHideTip;
 App.chrAddToReport      = chrAddToReport;
 App.chrToggleName       = chrToggleName;
